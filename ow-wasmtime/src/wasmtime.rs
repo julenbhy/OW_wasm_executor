@@ -35,7 +35,7 @@ impl WasmRuntime for Wasmtime {
         module: Vec<u8>,
     ) -> anyhow::Result<()> {
         
-        // Could brake due to https://docs.wasmtime.dev/api/wasmtime/struct.Module.html#method.deserialize Unsafety
+        // deserialize could fail due to https://docs.wasmtime.dev/api/wasmtime/struct.Module.html#method.deserialize Unsafety
         // module must've been precompiled with a matching version of wasmtime
         let module = unsafe {
             match Module::deserialize(&self.engine, &module) {

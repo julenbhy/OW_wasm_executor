@@ -59,7 +59,6 @@ impl WasmRuntime for Wasmtime {
         };
 
         // TODO:
-        //      This is a temporary solution to the problem of the same container_id being used multiple times.
         //      This should be replaced checking if the same module has allready been precompiled for another container_id.
         //      Multiple containers should be able to use the same precompiled module.
         self.modules.insert(container_id.clone(), action);

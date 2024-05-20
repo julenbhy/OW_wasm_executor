@@ -18,19 +18,7 @@ pub fn get_filenames<'a>() -> Vec<String> {
     matches.values_of_lossy("INPUT").unwrap()
 }
 
-pub fn precompile<F: FnOnce(&str) -> anyhow::Result<Vec<u8>>>(
-    filename: &str,
-    precompile_fn: F,
-    runtime_name: &'static str,
-) -> anyhow::Result<()> {
-    let precompiled_bytes = precompile_fn(&filename)?;
-
-    write_precompiled(filename, runtime_name, precompiled_bytes)?;
-
-    Ok(())
-}
-
-fn write_precompiled(
+pub fn write_precompiled(
     filename: &str,
     runtime_name: &'static str,
     precompiled: Vec<u8>,

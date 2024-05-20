@@ -1,21 +1,38 @@
-#[cfg(feature = "wasm")]
-ow_wasm_action::pass_json!(func);
+use std::{error::Error, io::stdin};
 
-#[cfg(not(feature = "wasm"))]
-ow_wasm_action::json_args!(func);
+use serde::{Serialize, Deserialize};
 
-fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error> {
-    let param1 = json
-        .get("param1")
-        .ok_or_else(|| anyhow::anyhow!("Expected param1 to be present"))?
-        .as_i64()
-        .ok_or_else(|| anyhow::anyhow!("Expected param1 to be an i64"))?;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Input {
+    pub param1: i32,
+    pub param2: i32,
+}
 
-    let param2 = json
-        .get("param2")
-        .ok_or_else(|| anyhow::anyhow!("Expected param2 to be present"))?
-        .as_i64()
-        .ok_or_else(|| anyhow::anyhow!("Expected param2 to be an i64"))?;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Output {
+    pub response: i32,
+}
 
-    Ok(serde_json::json!({ "result": param1 + param2 }))
+
+fn main() -> Result<(), Box<dyn Error>> {
+
+    // Get the input
+    let input: Input = serde_json::from_reader(stdin()).map_err(|e| {
+        eprintln!("ser: {e}");
+        e
+    })?;
+
+    // Perform the action
+    let response: i32 = input.param2 + input.param1;
+
+    // Set the output
+    let output = Output { response };
+    let serialized = serde_json::to_string(&output).map_err(|e| {
+        eprintln!("de: {e}");
+        e
+    })?;
+
+    println!("{serialized}");
+
+    Ok(())
 }

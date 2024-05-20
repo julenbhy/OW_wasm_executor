@@ -103,8 +103,6 @@ impl WasmRuntime for Wasmtime {
         // Manage output
         drop(store);
 
-        // TODO:
-        //      This is a temporary solution to the problem of the output being hardcoded to an integer.
         let contents: Vec<u8> = stdout
             .try_into_inner()
             .map_err(|_err| anyhow::Error::msg("sole remaining reference"))?

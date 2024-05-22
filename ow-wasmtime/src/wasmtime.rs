@@ -8,21 +8,23 @@ use ow_common::{ActionCapabilities, WasmAction, WasmRuntime};
 use wasmtime::*;
 use wasi_common::sync::WasiCtxBuilder;
 use wasi_common::WasiCtx;
-use wasi_common::pipe::ReadPipe;
-use wasi_common::pipe::WritePipe;
+use wasi_common::pipe::{ReadPipe, WritePipe};
 
 
 #[derive(Clone)]
 pub struct Wasmtime {
     pub engine: Engine,
-    pub modules: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
+    pub pre_instances: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
+    pub module_cache: Arc<DashMap<u64, InstancePre<WasiCtx>>>,
+
 }
 
 impl Default for Wasmtime {
     fn default() -> Self {
         Self {
             engine: Engine::default(),
-            modules: Arc::new(DashMap::new()),
+            pre_instances: Arc::new(DashMap::new()),
+            module_cache: Arc::new(DashMap::new()),
         }
     }
 }
@@ -34,32 +36,43 @@ impl WasmRuntime for Wasmtime {
         capabilities: ActionCapabilities,
         module: Vec<u8>,
     ) -> anyhow::Result<()> {
+
+        // Is it worth the hash operation against the preinstantiation?
+        // Yes, Hashing takes around 15000ns vs 250000ns for preinstantiation
+        let module_hash = fasthash::metro::hash64(&module); 
         
-        // deserialize could fail due to https://docs.wasmtime.dev/api/wasmtime/struct.Module.html#method.deserialize Unsafety
-        // module must've been precompiled with a matching version of wasmtime
-        let module = unsafe { match Module::deserialize(&self.engine, &module) {
-                                Ok(module) => module,
-                                Err(e) => {
-                                    println!("\x1b[31mError deserializing module: {}\x1b[0m", e);
-                                    return Err(anyhow!("Error deserializing module"));
-                                }
-                            }};
+        // Check if the preinstance of the module is already in the cache
+        let instance_pre = if let Some(pre) = self.module_cache.get(&module_hash) {
+            println!("Module found in cache. Using cached module...");
+            pre.clone()
+        } else {
+            println!("Module not found in cache. Preinstantiating module...");
+            // deserialize could fail due to https://docs.wasmtime.dev/api/wasmtime/struct.Module.html#method.deserialize Unsafety
+            // module must've been precompiled with a matching version of wasmtime
+            let module = unsafe { match Module::deserialize(&self.engine, &module) {
+                                    Ok(module) => module,
+                                    Err(e) => {
+                                        println!("\x1b[31mError deserializing module: {}\x1b[0m", e);
+                                        return Err(anyhow!("Error deserializing module"));
+                                    }
+                                }};
 
-        // Add WASI to the linker
-        let mut linker: wasmtime::Linker<WasiCtx> = Linker::new(&self.engine);
-        wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
+            // Add WASI to the linker
+            let mut linker: wasmtime::Linker<WasiCtx> = Linker::new(&self.engine);
+            wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
 
-        let instance_pre = linker.instantiate_pre(&module)?;
+            let instance_pre = linker.instantiate_pre(&module)?;
+
+            self.module_cache.insert(module_hash, instance_pre.clone());
+            instance_pre
+        };
 
         let action = WasmAction {
             module: instance_pre,
             capabilities,
         };
 
-        // TODO:
-        //      This should be replaced checking if the same module has allready been precompiled for another container_id.
-        //      Multiple containers should be able to use the same precompiled module.
-        self.modules.insert(container_id.clone(), action);
+        self.pre_instances.insert(container_id.clone(), action);
 
         Ok(())
     }
@@ -72,7 +85,7 @@ impl WasmRuntime for Wasmtime {
     ) -> Result<Result<serde_json::Value, serde_json::Value>, anyhow::Error> {
 
         let wasm_action = self
-            .modules
+            .pre_instances
             .get(container_id)
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
@@ -116,7 +129,7 @@ impl WasmRuntime for Wasmtime {
     }
 
     fn destroy(&self, container_id: &str) {
-        if let None = self.modules.remove(container_id) {
+        if let None = self.pre_instances.remove(container_id) {
             println!("No container with id {} existed.", container_id);
         }
     }

@@ -14,8 +14,8 @@ use wasi_common::pipe::{ReadPipe, WritePipe};
 #[derive(Clone)]
 pub struct Wasmtime {
     pub engine: Engine,
-    pub pre_instances: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
-    pub module_cache: Arc<DashMap<u64, InstancePre<WasiCtx>>>,
+    pub instance_pres: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
+    pub instance_pre_cache: Arc<DashMap<u64, InstancePre<WasiCtx>>>, // TODO: Remove unused instance_pres after an unusedTimeout
 
 }
 
@@ -23,8 +23,8 @@ impl Default for Wasmtime {
     fn default() -> Self {
         Self {
             engine: Engine::default(),
-            pre_instances: Arc::new(DashMap::new()),
-            module_cache: Arc::new(DashMap::new()), // TODO: Remove unused modules after an unusedTimeout
+            instance_pres: Arc::new(DashMap::new()),
+            instance_pre_cache: Arc::new(DashMap::new()),
         }
     }
 }
@@ -42,7 +42,7 @@ impl WasmRuntime for Wasmtime {
         let module_hash = fasthash::metro::hash64(&module); 
         
         // Check if the preinstance of the module is already in the cache
-        let instance_pre = if let Some(pre) = self.module_cache.get(&module_hash) {
+        let instance_pre = if let Some(pre) = self.instance_pre_cache.get(&module_hash) {
             println!("Module found in cache. Using cached module...");
             pre.clone()
         } else {
@@ -63,7 +63,7 @@ impl WasmRuntime for Wasmtime {
 
             let instance_pre = linker.instantiate_pre(&module)?;
 
-            self.module_cache.insert(module_hash, instance_pre.clone());
+            self.instance_pre_cache.insert(module_hash, instance_pre.clone());
             instance_pre
         };
 
@@ -72,7 +72,7 @@ impl WasmRuntime for Wasmtime {
             capabilities,
         };
 
-        self.pre_instances.insert(container_id.clone(), action);
+        self.instance_pres.insert(container_id.clone(), action);
 
         Ok(())
     }
@@ -85,7 +85,7 @@ impl WasmRuntime for Wasmtime {
     ) -> Result<Result<serde_json::Value, serde_json::Value>, anyhow::Error> {
 
         let wasm_action = self
-            .pre_instances
+            .instance_pres
             .get(container_id)
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
@@ -129,7 +129,7 @@ impl WasmRuntime for Wasmtime {
     }
 
     fn destroy(&self, container_id: &str) {
-        if let None = self.pre_instances.remove(container_id) {
+        if let None = self.instance_pres.remove(container_id) {
             println!("No container with id {} existed.", container_id);
         }
     }

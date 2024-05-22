@@ -37,15 +37,13 @@ impl WasmRuntime for Wasmtime {
         
         // deserialize could fail due to https://docs.wasmtime.dev/api/wasmtime/struct.Module.html#method.deserialize Unsafety
         // module must've been precompiled with a matching version of wasmtime
-        let module = unsafe {
-            match Module::deserialize(&self.engine, &module) {
-                Ok(module) => module,
-                Err(e) => {
-                    println!("\x1b[31mError deserializing module: {}\x1b[0m", e);
-                    return Err(anyhow!("Error deserializing module"));
-                }
-            }
-        };
+        let module = unsafe { match Module::deserialize(&self.engine, &module) {
+                                Ok(module) => module,
+                                Err(e) => {
+                                    println!("\x1b[31mError deserializing module: {}\x1b[0m", e);
+                                    return Err(anyhow!("Error deserializing module"));
+                                }
+                            }};
 
         // Add WASI to the linker
         let mut linker: wasmtime::Linker<WasiCtx> = Linker::new(&self.engine);

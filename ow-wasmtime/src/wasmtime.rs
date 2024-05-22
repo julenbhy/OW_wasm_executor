@@ -24,7 +24,7 @@ impl Default for Wasmtime {
         Self {
             engine: Engine::default(),
             pre_instances: Arc::new(DashMap::new()),
-            module_cache: Arc::new(DashMap::new()),
+            module_cache: Arc::new(DashMap::new()), // TODO: Remove unused modules after an unusedTimeout
         }
     }
 }

@@ -5,18 +5,17 @@ use std::{sync::Arc,
 use dashmap::DashMap;
 use anyhow::anyhow;
 use ow_common::{ActionCapabilities, WasmAction, WasmRuntime};
+
 use wasmtime::*;
 use wasi_common::sync::WasiCtxBuilder;
 use wasi_common::WasiCtx;
 use wasi_common::pipe::{ReadPipe, WritePipe};
-
 
 #[derive(Clone)]
 pub struct Wasmtime {
     pub engine: Engine,
     pub instance_pres: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
     pub instance_pre_cache: Arc<DashMap<u64, InstancePre<WasiCtx>>>, // TODO: Remove unused instance_pres after an unusedTimeout
-
 }
 
 impl Default for Wasmtime {
@@ -121,9 +120,7 @@ impl WasmRuntime for Wasmtime {
 
         let output: Output = serde_json::from_slice(&contents)?;
 
-        let response = serde_json::json!({
-            "response": output.response
-        });
+        let response = serde_json::to_value(output.response)?;
 
         Ok(Ok(response))
     }

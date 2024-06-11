@@ -41,7 +41,8 @@ wasm-opt -O4 -o ./target/wasm32-wasi/release/examples/add.wasm ./target/wasm32-w
 3. Precompile the example for efficient execution with wasmtime:
 
 ```sh
-cargo run --manifest-path ./ow-wasmtime-precompiler/Cargo.toml --release --bin wasmtime ./target/wasm32-wasi/release/examples/add.wasm
+./wasmtime_precompile.sh target/wasm32-wasi/release/examples/add.wasm
+# The module has to be precompiled with the same version of wasmtime that the embedder uses (wasmtime 21.0.1)
 ```
 
 4. Install wsk-cli from https://github.com/apache/openwhisk-cli/releases/tag/1.2.0
@@ -79,5 +80,5 @@ wsk action create --kind wasm:0.1 add ./target/wasm32-wasi/release/examples/add-
 8. Run the test_client to call a burst action:
 
 ```sh
-python test_client.py
+python parallel_action_client.py
 ```

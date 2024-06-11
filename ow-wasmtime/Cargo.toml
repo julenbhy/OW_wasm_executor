@@ -5,9 +5,9 @@ authors = ["PhilippGackstatter <philipp.gackstatter@student.tuwien.ac.at>"]
 edition = "2018"
 
 [dependencies]
-wasi-common = "20.0.2"
-wasmtime = "20.0.2"
-wasmtime-wasi = "20.0.2"
+wasi-common = "21.0.1"
+wasmtime = "21.0.1"
+
 
 
 ow-common = { path = "../ow-common" }

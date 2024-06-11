@@ -4,7 +4,6 @@ members = [
     "ow-executor",
     "ow-wasm-action",
     "ow-wasmtime",
-    "ow-wasmtime-precompiler",
 ]
 
 [profile.release]

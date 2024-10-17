@@ -6,8 +6,21 @@ static ADDRESS: &str = "127.0.0.1:9000";
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    #[cfg(feature = "wasmtime_rt")]
-    let runtime = ow_wasmtime::Wasmtime::default();
+
+    #[cfg(feature = "wasmtime_args")]
+    let runtime = ow_wasmtime_args::Wasmtime::default();
+
+    #[cfg(feature = "wasmtime_stdio")]
+    let runtime = ow_wasmtime_stdio::Wasmtime::default();
+
+    #[cfg(feature = "wasmtime_memory")]
+    let runtime = ow_wasmtime_memory::Wasmtime::default();
+
+    #[cfg(feature = "wasmtime_component")]
+    let runtime = ow_wasmtime_component::Wasmtime::default();
+
+
+
 
     // let subscriber = tracing_subscriber::fmt()
     //     .with_max_level(Level::TRACE)

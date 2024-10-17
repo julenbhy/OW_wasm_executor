@@ -2,7 +2,6 @@ import json
 import requests
 import time
 
-
 APIHOST='http://172.17.0.1:3233/api/v1'
 
 headers = {'Authorization': 'Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A='}
@@ -12,6 +11,7 @@ def sync_call(action_name: str, params: dict):
     start_time = time.time()
     response = requests.post(url, json=params, headers=headers)
     elapsed_time = time.time() - start_time
+    print('REQUEST:', response.request.__dict__)
     return response.text, elapsed_time
 
 
@@ -20,6 +20,7 @@ def async_call(action_name: str, params: dict):
 
     start_time = time.time()
     response = requests.post(url, json=params, headers=headers)
+    print('REQUEST:', response.request.__dict__)
     data = json.loads(response.text)
     activation_id = data["activationId"]
     url = APIHOST+'/namespaces/_/activations/'+activation_id
@@ -43,8 +44,8 @@ def main():
 
     response ,elapsed_time = async_call('add', req_body)
 
-    print('Worker response:', response)
-    print('Time taken:', elapsed_time)
+    print('RESPONSE:', response)
+    print('TIME TAKEN:', elapsed_time)
 
 
 if __name__ == '__main__':

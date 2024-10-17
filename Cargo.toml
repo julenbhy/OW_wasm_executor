@@ -2,8 +2,12 @@
 members = [
     "ow-common",
     "ow-executor",
-    "ow-wasm-action",
-    "ow-wasmtime",
+    "ow-wasmtime-args",
+    "ow-wasmtime-stdio",
+    "ow-wasmtime-memory",
+    "ow-wasmtime-component",
+    "action-builder",
+    "action-builder-component"
 ]
 
 [profile.release]

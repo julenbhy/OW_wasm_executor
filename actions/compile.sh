@@ -2,7 +2,9 @@
 
 set -e
 
-WASMTIME=${WASMTIME_PATH:-"wasmtime"}
+WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v25.0.2-x86_64-linux/wasmtime"}
+export WASMTIME
+
 
 # Supported parsers
 SUPPORTED_PARSERS=("args" "stdio" "memory" "component")
@@ -26,9 +28,9 @@ if [[ ! " ${SUPPORTED_PARSERS[@]} " =~ " ${PARSER} " ]]; then
     exit 1
 fi
 
-# Check if the version matches the required version (21.0.1)
-if [ "$($WASMTIME --version)" != "wasmtime-cli 21.0.1 (cedf9aa0f 2024-05-22)" ]; then
-    echo "The version of wasmtime is not 21.0.1. Please install the correct version."
+# Check if the version matches the required version (25.0.2)
+if [ "$($WASMTIME --version)" != "wasmtime 25.0.2 (52a565bb9 2024-10-09)" ]; then
+    echo "The version of wasmtime is not 25.0.2. Please install the correct version."
     exit 1
 fi
 
@@ -40,7 +42,6 @@ fi
 
 FILENAME=$(basename "$INPUT_FILE" .rs) # Filename without the path and extension
 BUILDER="action-builder"
-RUNTIME="wasmtime"
 
 # Check if the file containing the bytes exists
 if [ ! -f "$INPUT_FILE" ]; then

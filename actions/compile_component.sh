@@ -2,33 +2,13 @@
 
 set -e
 
-WASMTIME=${WASMTIME_PATH:-"wasmtime"}
-
-# Check if the necessary arguments are passed
-# Parsers can be args, stdio, memory, or component
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <filename>"
-    exit 1
-fi
+echo "This script should only be called by compile.sh."
 
 # Input variables
 INPUT_FILE="$1"        # Original filename
 
-# Check if the version matches the required version (21.0.1)
-if [ "$($WASMTIME --version)" != "wasmtime-cli 21.0.1 (cedf9aa0f 2024-05-22)" ]; then
-    echo "The version of wasmtime is not 21.0.1. Please install the correct version."
-    exit 1
-fi
-
 FILENAME=$(basename "$INPUT_FILE" .rs) # Filename without the path and extension
 BUILDER="action-builder-component"
-RUNTIME="wasmtime"
-
-# Check if the file containing the bytes exists
-if [ ! -f "$INPUT_FILE" ]; then
-    echo "The file '$INPUT_FILE' does not exist."
-    exit 1
-fi
 
 # Prepare the builder
 cp "$BUILDER/Cargo_template.toml" "$BUILDER/Cargo.toml"
@@ -46,10 +26,8 @@ cp "$BUILDER/src/lib_template.rs" "$BUILDER/src/lib.rs"
 cat "$INPUT_FILE" >> "$BUILDER/src/lib.rs"
 
 # Compile the file with the selected parser feature
-
 echo "Compiling with component parser"
 cargo component build --manifest-path ./"$BUILDER"/Cargo.toml --release
-
 
 # Check if the compilation was successful
 if [ $? -ne 0 ]; then

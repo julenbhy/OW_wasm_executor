@@ -5,7 +5,7 @@
 </strong>
 </div>
 
-This repository is an updated version of [wow](https://github.com/PhilippGackstatter/wow/tree/master), now using Wasmtime 20 and including new capabilities such as `instance_pre`.
+This repository is an updated version of [wow](https://github.com/PhilippGackstatter/wow/tree/master), now using Wasmtime 25 and including new capabilities such as `instance_pre`.
 
 ## Crates Overview
 
@@ -54,7 +54,7 @@ cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime
 
 This will add all the required dependencies for the selected execution model and compile it using the action builder crate. The script will also add the function to OpenWhisk.
 
-Note that the precompilation step performed by the script requires wasmtime-cli 21.0.1 to be installed
+Note that the precompilation step performed by the script requires wasmtime-cli 25.0.2 to be installed
 
 5. Run the test_client to call a burst action:
 

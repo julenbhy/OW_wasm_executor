@@ -79,7 +79,7 @@ class Config:
                             help=f'Number of warmup invocations (default: {self.warmup_invocations})')
 
         parser.add_argument('-W', '--workers', type=int, default=self.workers, metavar='',
-                            help=f'Number of workers (default: {self.workers})')
+                            help=f'Number of workers invoked por activation (for burst OpenWhisk) (default: {self.workers})')
         
         parser.add_argument('-f', '--function', type=str, default=self.function, metavar='',
                             help=f'Name of the function to benchmark (default: {self.function})')
@@ -140,7 +140,7 @@ class Config:
             self.payload = json.loads(self.input_string)
 
 
-def extract_metrics(response):
+def extract_metrics(response, config):
     """
     Extracts relevant metrics from the get_response JSON content, including initTime, duration, client_elapsed_time, waitTime, and success.
     """
@@ -151,20 +151,18 @@ def extract_metrics(response):
         init_time = annotations.get('initTime', 0)
         wait_time = annotations.get('waitTime', 0)
         duration = json_response.get('duration', 0)
-        elapsed = getattr(response, 'elapsed', 0)  # This will be a timedelta
-        elapsed = elapsed.total_seconds() * 1000 if isinstance(elapsed, timedelta) else 0
-        client_elapsed_time = getattr(response, 'client_elapsed_time', 0)  # Use getattr to safely get the attribute
-        success = json_response.get('response', {}).get('status', '').lower() == 'success'
+        client_elapsed_time = getattr(response, 'client_elapsed_time', 0)
+        if config.blocking: success = json_response.get('success', False)
+        else: success = json_response.get('response', {}).get('status', '').lower() == 'success'
 
         return {
             'initTime': init_time,
             'waitTime': wait_time,
             'duration': duration,
-            'elapsed': elapsed,
             'client_elapsed_time': client_elapsed_time,
             'success': success
         }
-    except (ValueError, KeyError): return {'initTime': 0, 'waitTime': 0, 'duration': 0, 'elapsed': 0, 'client_elapsed_time': 0, 'success': False}
+    except (ValueError, KeyError): return {'initTime': 0, 'waitTime': 0, 'duration': 0, 'client_elapsed_time': 0, 'success': False}
 
 
 def benchmark_statistics(metrics_list):
@@ -176,16 +174,14 @@ def benchmark_statistics(metrics_list):
     init_times = [m['initTime'] for m in metrics_list]
     wait_times = [m['waitTime'] for m in metrics_list]
     durations = [m['duration'] for m in metrics_list]
-    elapsed_times = [m['elapsed'] for m in metrics_list]
     client_elapsed_times = [m['client_elapsed_time'] for m in metrics_list]
     success_rate = sum(1 for m in metrics_list if m['success']) / len(metrics_list) * 100
 
     stats = {
-        'initTime': {'avg': statistics.mean(init_times), 'min': min(init_times), 'max': max(init_times)},
-        'waitTime': {'avg': statistics.mean(wait_times), 'min': min(wait_times), 'max': max(wait_times)},
-        'duration': {'avg': statistics.mean(durations), 'min': min(durations), 'max': max(durations)},
-        'elapsed': {'avg': statistics.mean(elapsed_times), 'min': min(elapsed_times), 'max': max(elapsed_times)},
-        'client_elapsed_time': {'avg': statistics.mean(client_elapsed_times), 'min': min(client_elapsed_times), 'max': max(client_elapsed_times)},
+        'initTime': {'avg': statistics.mean(init_times), 'min': min(init_times), 'max': max(init_times), 'std': statistics.stdev(init_times)},
+        'waitTime': {'avg': statistics.mean(wait_times), 'min': min(wait_times), 'max': max(wait_times), 'std': statistics.stdev(wait_times)},
+        'duration': {'avg': statistics.mean(durations), 'min': min(durations), 'max': max(durations), 'std': statistics.stdev(durations)},
+        'client_elapsed_time': {'avg': statistics.mean(client_elapsed_times), 'min': min(client_elapsed_times), 'max': max(client_elapsed_times), 'std': statistics.stdev(client_elapsed_times)},
         'success_rate': success_rate
     }
     return stats
@@ -195,14 +191,13 @@ def format_results(stats, config):
     """
     Formats the benchmark results for display as a table.
     """
-    headers = ["Metric", "Average", "Minimum", "Maximum"]
+    headers = ["Metric", "Average", "Minimum", "Maximum", "Standard Deviation"]
     table_data = [
-        ["InitTime", f"{stats['initTime']['avg']:.4f}", f"{stats['initTime']['min']:.4f}", f"{stats['initTime']['max']:.4f}"],
-        ["WaitTime", f"{stats['waitTime']['avg']:.4f}", f"{stats['waitTime']['min']:.4f}", f"{stats['waitTime']['max']:.4f}"],
-        ["Duration", f"{stats['duration']['avg']:.4f}", f"{stats['duration']['min']:.4f}", f"{stats['duration']['max']:.4f}"],
-        ["Elapsed", f"{stats['elapsed']['avg']:.4f}", f"{stats['elapsed']['min']:.4f}", f"{stats['elapsed']['max']:.4f}"],
-        ["Client Elapsed Time", f"{stats['client_elapsed_time']['avg']:.4f}", f"{stats['client_elapsed_time']['min']:.4f}", f"{stats['client_elapsed_time']['max']:.4f}"],
-        ["Success Rate", f"{stats['success_rate']:.2f}%", "-", "-"]
+        ["InitTime", f"{stats['initTime']['avg']:.4f}", f"{stats['initTime']['min']:.4f}", f"{stats['initTime']['max']:.4f}", f"{stats['initTime']['std']:.4f}"],
+        ["WaitTime", f"{stats['waitTime']['avg']:.4f}", f"{stats['waitTime']['min']:.4f}", f"{stats['waitTime']['max']:.4f}", f"{stats['waitTime']['std']:.4f}"],
+        ["Duration", f"{stats['duration']['avg']:.4f}", f"{stats['duration']['min']:.4f}", f"{stats['duration']['max']:.4f}", f"{stats['duration']['std']:.4f}"],
+        ["Client Elapsed Time", f"{stats['client_elapsed_time']['avg']:.4f}", f"{stats['client_elapsed_time']['min']:.4f}", f"{stats['client_elapsed_time']['max']:.4f}", f"{stats['client_elapsed_time']['std']:.4f}"],
+        ["Success Rate", f"{stats['success_rate']:.2f}%", "-", "-", "-"]
     ]
 
     # Display the number of runs and invocations
@@ -222,7 +217,7 @@ def write_results_to_file_csv(stats, config):
     Writes the benchmark results to a specified CSV file.
     """
     with open(config.output_file, 'w', newline='') as csvfile:
-        fieldnames = ['Metric', 'Average', 'Min', 'Max', 'Success Rate']
+        fieldnames = ['Metric', 'Average', 'Min', 'Max', 'Std', 'Success Rate']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         # Write headers
@@ -230,13 +225,13 @@ def write_results_to_file_csv(stats, config):
 
         # Write rows for each metric
         writer.writerow({'Metric': 'InitTime', 'Average': f"{stats['initTime']['avg']:.4f}",
-                         'Min': f"{stats['initTime']['min']:.4f}", 'Max': f"{stats['initTime']['max']:.4f}"})
+                         'Min': f"{stats['initTime']['min']:.4f}", 'Max': f"{stats['initTime']['max']:.4f}", 'Std': f"{stats['initTime']['std']:.4f}"})
+        writer.writerow({'Metric': 'WaitTime', 'Average': f"{stats['waitTime']['avg']:.4f}",
+                         'Min': f"{stats['waitTime']['min']:.4f}", 'Max': f"{stats['waitTime']['max']:.4f}", 'Std': f"{stats['waitTime']['std']:.4f}"})
         writer.writerow({'Metric': 'Duration', 'Average': f"{stats['duration']['avg']:.4f}",
-                         'Min': f"{stats['duration']['min']:.4f}", 'Max': f"{stats['duration']['max']:.4f}"})
-        writer.writerow({'Metric': 'Elapsed', 'Average': f"{stats['elapsed']['avg']:.4f}",
-                         'Min': f"{stats['elapsed']['min']:.4f}", 'Max': f"{stats['elapsed']['max']:.4f}"})
+                         'Min': f"{stats['duration']['min']:.4f}", 'Max': f"{stats['duration']['max']:.4f}", 'Std': f"{stats['duration']['std']:.4f}"})
         writer.writerow({'Metric': 'Client Elapsed Time', 'Average': f"{stats['client_elapsed_time']['avg']:.4f}",
-                         'Min': f"{stats['client_elapsed_time']['min']:.4f}", 'Max': f"{stats['client_elapsed_time']['max']:.4f}"})
+                         'Min': f"{stats['client_elapsed_time']['min']:.4f}", 'Max': f"{stats['client_elapsed_time']['max']:.4f}", 'Std': f"{stats['client_elapsed_time']['std']:.4f}"})
         writer.writerow({'Metric': 'Success Rate', 'Average': f"{stats['success_rate']:.2f}%", 'Min': '', 'Max': ''})
 
     log.info(f"Results written to {config.output_file}")
@@ -304,12 +299,12 @@ def run_single_benchmark(config):
         response = sync_call(config)
         #log.info(f"\n\nResponse: {response.__dict__}")
         log.info(f"\n\nResponse:\n{format_response_dict(response)}")
-        return extract_metrics(response)
+        return extract_metrics(response, config)
     else:
         post_response, get_response = async_call(config)
         log.info(f"\n\nPost response:\n{format_response_dict(post_response)}")
         log.info(f"\nGet response:\n{format_response_dict(get_response)}")
-        return extract_metrics(get_response)
+        return extract_metrics(get_response, config)
 
 
 def run_benchmark_invocations(config, warmup=False):

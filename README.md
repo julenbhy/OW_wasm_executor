@@ -61,3 +61,8 @@ Note that the precompilation step performed by the script requires wasmtime-cli 
 ```sh
 python tests/simple_action_client.py
 ```
+
+6. For benchmarking a function, use the following benchmarking tool:
+```sh
+python bench/bench.py -f add -s '{"param1": 3, "param2": 1}' -o bench/out.csv
+```

@@ -1,3 +1,17 @@
 /target
 node_modules
 build
+
+# Ignore all .wasm, .cwasm and .zip files at any level
+*.wasm
+*.cwasm
+*.zip
+
+# Ignore all files under /example at any level
+*/examples
+
+# Ignore othere files
+action-builder/Cargo.toml
+action-builder-component/Cargo.toml
+action-builder-component/src/bindings.rs
+action-builder-component/src/lib.rs

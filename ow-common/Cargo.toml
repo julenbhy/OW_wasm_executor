@@ -1,12 +1,12 @@
 [package]
 name = "ow-common"
-version = "0.1.0"
-authors = ["PhilippGackstatter <philipp.gackstatter@student.tuwien.ac.at>"]
-edition = "2018"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-base64 = "0.13.1"
-zip = "0.5.13"
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+zip = { workspace = true }

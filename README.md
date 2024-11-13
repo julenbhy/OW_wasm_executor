@@ -25,7 +25,7 @@ As a small tutorial, let's build the wasmtime executor and run one of the exampl
 2. Clone the openwhisk repo, checkout the appropriate branch and run OpenWhisk in a separate terminal:
 
 ```sh
-git clone https://github.com/PhilippGackstatter/openwhisk
+git clone https://github.com/julenbhy/openwhisk
 cd openwhisk
 git checkout burst-openwasm
 ./gradlew core:standalone:bootRun

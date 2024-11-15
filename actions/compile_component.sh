@@ -12,12 +12,19 @@ BUILDER="action-builder-component"
 
 # Prepare the builder
 cp "$BUILDER/Cargo_template.toml" "$BUILDER/Cargo.toml"
+
 # Add the necessary dependencies to the builder
-crate_names=$(grep -Eo 'use [a-zA-Z0-9_]+::' "$INPUT_FILE" | awk '{print $2}' | sed 's/::$//' | sort | uniq)
+crate_names=$(grep -Eo 'use [a-zA-Z0-9_]+(::)?' "$INPUT_FILE" | awk '{print $2}' | sed 's/::$//' | sort | uniq)
+pwd
+echo "Detected dependencies: $crate_names"
 for crate in $crate_names; do
-  if ! grep -q "^$crate =" Cargo.toml; then
+  if ! grep -q "^$crate =" $BUILDER/Cargo.toml; then
     echo "Adding dependency $crate to Cargo.toml"
-    cargo add --manifest-path "$BUILDER/Cargo.toml"  "$crate"
+    if ! cargo add --manifest-path "$BUILDER/Cargo.toml" "$crate"; then
+      echo "Failed to add crate '$crate'. It may not be compatible or required."
+    fi
+  else
+    echo "Dependency $crate already added to Cargo.toml" 
   fi
 done
 

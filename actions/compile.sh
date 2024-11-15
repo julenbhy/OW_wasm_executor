@@ -2,7 +2,7 @@
 
 set -e
 
-WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v25.0.2-x86_64-linux/wasmtime"}
+WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v26.0.1-x86_64-linux/wasmtime"}
 export WASMTIME
 
 
@@ -28,9 +28,9 @@ if [[ ! " ${SUPPORTED_PARSERS[@]} " =~ " ${PARSER} " ]]; then
     exit 1
 fi
 
-# Check if the version matches the required version (25.0.2)
-if [ "$($WASMTIME --version)" != "wasmtime 25.0.2 (52a565bb9 2024-10-09)" ]; then
-    echo "The version of wasmtime is not 25.0.2. Please install the correct version."
+# Check if the version matches the required version (26.0.1)
+if [ "$($WASMTIME --version)" != "wasmtime 26.0.1 (c138e08bf 2024-11-05)" ]; then
+    echo "The version of wasmtime is not 26.0.1. Please install the correct version."
     exit 1
 fi
 
@@ -53,11 +53,17 @@ fi
 cp "$BUILDER/Cargo_template.toml" "$BUILDER/Cargo.toml"
 
 # Add the necessary dependencies to the builder
-crate_names=$(grep -Eo 'use [a-zA-Z0-9_]+::' "$INPUT_FILE" | awk '{print $2}' | sed 's/::$//' | sort | uniq)
+crate_names=$(grep -Eo 'use [a-zA-Z0-9_]+(::)?' "$INPUT_FILE" | awk '{print $2}' | sed 's/::$//' | sort | uniq)
+pwd
+echo "Detected dependencies: $crate_names"
 for crate in $crate_names; do
-  if ! grep -q "^$crate =" Cargo.toml; then
+  if ! grep -q "^$crate =" $BUILDER/Cargo.toml; then
     echo "Adding dependency $crate to Cargo.toml"
-    cargo add --manifest-path "$BUILDER/Cargo.toml"  "$crate"
+    if ! cargo add --manifest-path "$BUILDER/Cargo.toml" "$crate"; then
+      echo "Failed to add crate '$crate'. It may not be compatible or required."
+    fi
+  else
+    echo "Dependency $crate already added to Cargo.toml" 
   fi
 done
 

@@ -28,6 +28,33 @@ impl Default for Wasmtime {
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
 
+
+fn retrieve_result(instance: &wasmtime::Instance, store: &mut Store<WasiCtx>) -> Result<String> {
+    // Acces the WASM memory
+    let memory = instance
+        .get_memory(&mut *store, "memory")
+        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+    // Obtain the length of the result with get_result_len
+    let get_result_len = instance
+        .get_typed_func::<(), u32>(&mut *store, "get_result_len")
+        .map_err(|_| anyhow::anyhow!("Failed to get get_result_len"))?;
+    let length = get_result_len.call(&mut *store, ())? as usize;
+
+    // Obtain the pointer to the result with get_result
+    let get_result = instance
+        .get_typed_func::<(), u32>(&mut *store, "get_result")
+        .map_err(|_| anyhow::anyhow!("Failed to get get_result"))?;
+    let content_ptr = get_result.call(&mut *store, ())? as usize;
+
+    // Read the result from the WASM memory
+    let content = memory.data(&store)[content_ptr..(content_ptr + length)].to_vec();
+    let result = String::from_utf8(content)?;
+
+    Ok(result)
+}
+
+
 impl WasmRuntime for Wasmtime {
     fn initialize(
         &self,
@@ -107,16 +134,7 @@ impl WasmRuntime for Wasmtime {
         main.call(&mut store, ())?;
 
         // Get the result from the WASM module execution
-        let Some(memory) = instance.get_memory(&mut store, "memory") else { anyhow::bail!("Failed to get WASM memory"); };
-
-        let Ok(get_result_len) = instance.get_typed_func::<(), u32>(&mut store, "get_result_len") else { anyhow::bail!("Failed to get get_result_len");};
-        let length = get_result_len.call(&mut store, ())? as usize;
-
-        let Ok(get_result) = instance.get_typed_func::<(), u32>(&mut store, "get_result") else { anyhow::bail!("Failed to get get_result");};
-        let content_ptr = get_result.call(&mut store, ())? as usize;
-
-        let content = memory.data(&store)[content_ptr..(content_ptr + length)].to_vec();
-        let result = String::from_utf8(content)?;
+        let result = retrieve_result(&instance, &mut store)?;
         let response = serde_json::from_str(&result)?;
 
         Ok(Ok(response))

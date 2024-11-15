@@ -29,7 +29,21 @@ dashmap = "5.5.3"
 timedmap = "1.0.2"
 fasthash = "0.4.0"
 
-wasmtime = "25.0.2"
-wasi-common = "25.0.2"
-wasmtime-wasi = "25.0.2"
+wasmtime = "26.0.1"
+wasi-common = "26.0.1"
+wasmtime-wasi = "26.0.1"
 ow-common = { path = "./ow-common" }
+
+
+
+[workspace.lints.rust]
+# Turn on some lints which are otherwise allow-by-default in rustc.
+unused_extern_crates = 'warn'
+trivial_numeric_casts = 'warn'
+unstable_features = 'warn'
+unused_import_braces = 'warn'
+unused-lifetimes = 'warn'
+unused-macro-rules = 'warn'
+
+# Don't warn about unknown cfg condition in `#[cfg(pulley_tail_calls)]`
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(pulley_tail_calls)'] }

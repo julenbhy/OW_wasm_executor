@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! args_parser {
+macro_rules! args_method {
     ($($t:ident)*) => ($(
 
         static mut RESULT: Option<String> = None;
@@ -48,7 +48,7 @@ macro_rules! args_parser {
 
 
 #[macro_export]
-macro_rules! stdio_parser {
+macro_rules! stdio_method {
     ($($t:ident)*) => ($(
 
         use std::{error::Error, io::stdin};
@@ -75,7 +75,7 @@ macro_rules! stdio_parser {
 
 
 #[macro_export]
-macro_rules! memory_parser {
+macro_rules! memory_method {
     ($($t:ident)*) => ($(
 
         use serde_json::Value;

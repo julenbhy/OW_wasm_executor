@@ -6,25 +6,25 @@ WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v26.0.1-x86_64-linux/wasmtime"}
 export WASMTIME
 
 
-# Supported parsers
-SUPPORTED_PARSERS=("args" "stdio" "memory" "component")
+# Supported methods
+INPUT_METHODS=("memory" "component")
 
 
 # Check if the necessary arguments are passed
-# Parsers can be args, stdio, memory, or component
+# methods can be args, stdio, memory, or component
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <filename> <parser>"
-    echo "Supported parsers: ${SUPPORTED_PARSERS[*]}"
+    echo "Usage: $0 <filename> <input_method>"
+    echo "Supported argument passing methods: ${INPUT_METHODS[*]}"
     exit 1
 fi
 
 # Input variables
 INPUT_FILE="$1"        # Original filename
-PARSER="$2"            # Parser selected by the user
+METHOD="$2"            # Method selected by the user
 
-# Check if the selected parser is valid
-if [[ ! " ${SUPPORTED_PARSERS[@]} " =~ " ${PARSER} " ]]; then
-    echo "Invalid parser: $PARSER. Supported parsers are: ${SUPPORTED_PARSERS[*]}"
+# Check if the selected method is valid
+if [[ ! " ${INPUT_METHODS[@]} " =~ " ${METHOD} " ]]; then
+    echo "Invalid method: $METHOD. Supported methods are: ${INPUT_METHODS[*]}"
     exit 1
 fi
 
@@ -34,8 +34,8 @@ if [ "$($WASMTIME --version)" != "wasmtime 26.0.1 (c138e08bf 2024-11-05)" ]; the
     exit 1
 fi
 
-# If the parser is component, call compile_component.sh $INPUT_FILE
-if [ "$PARSER" == "component" ]; then
+# If the METHOD is component, call compile_component.sh $INPUT_FILE
+if [ "$METHOD" == "component" ]; then
     ./actions/compile_component.sh "$INPUT_FILE"
     exit 0
 fi
@@ -71,15 +71,15 @@ done
 mkdir -p "$BUILDER/examples/"
 cp "$INPUT_FILE" "$BUILDER/examples/"
 
-# Add the parser feature to the builder
-sed -i "1i action_builder::${PARSER}_parser!(func);" "$BUILDER/examples/$FILENAME.rs"
+# Add the METHOD feature to the builder
+sed -i "1i action_builder::${METHOD}_method!(func);" "$BUILDER/examples/$FILENAME.rs"
 
 
-# Determine the feature based on the selected parser
-FEATURE="${PARSER}_parser"
+# Determine the feature based on the selected METHOD
+FEATURE="${METHOD}_method"
 
-# Compile the file with the selected parser feature
-echo "Compiling with $PARSER parser"
+# Compile the file with the selected METHOD feature
+echo "Compiling with $METHOD method."
 cargo build --manifest-path ./"$BUILDER"/Cargo.toml --release --example "$FILENAME" --target wasm32-wasi
 
 
@@ -100,4 +100,4 @@ zip "./actions/compiled/$FILENAME.zip" "./actions/compiled/$FILENAME.cwasm"
 # Deploy to OpenWhisk
 wsk action update --kind wasm:0.1 "$FILENAME" "./actions/compiled/$FILENAME.zip"
 
-echo "Action '$FILENAME' updated with parser '$PARSER'."
+echo "Action '$FILENAME' updated with '$METHOD' argument passing method."

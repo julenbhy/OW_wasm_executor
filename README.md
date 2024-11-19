@@ -15,6 +15,10 @@ The project is split into multiple crates, which are:
 - `ow-executor` implements the actual container runtime and the OpenWhisk runtime protocol.
 - `ow-wasmtime` implements the `WasmRuntime` trait for [Wasmtime](https://github.com/bytecodealliance/wasmtime).
 
+- `ow-wasmtime-nn` implements the `WasmRuntime` trait for [Wasmtime](https://github.com/bytecodealliance/wasmtime) with wasi-nn support.
+
+- `ow-wasmtime-component` implements the `WasmRuntime` trait for [Wasmtime](https://github.com/bytecodealliance/wasmtime) using the Wasm component model.
+
 ## Tutorial with Wasmtime
 
 As a small tutorial, let's build the wasmtime executor and run one of the examples.
@@ -41,10 +45,10 @@ wsk property set --apihost 'http://172.17.0.1:3233' --auth '23bc46b1-71f6-4ed5-8
 
 Execute this command.
 
-3. In a new terminal, run the desired wasmtime executor with the following command from the root of this repository (change "wasmtime_memory" for the desired execution model):
+3. In a new terminal, run the desired wasmtime executor with the following command from the root of this repository:
 
 ```sh
-cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime_memory
+cargo run --manifest-path ./ow-executor/Cargo.toml --release
 ```
 
 4. Next, build the `add` example with:
@@ -55,9 +59,9 @@ cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime
 
 This will add all the required dependencies for the selected execution model and compile it using the action builder crate. The script will also add the function to OpenWhisk.
 
-Note that the precompilation step performed by the script requires wasmtime-cli 25.0.2 to be installed
+Note that the precompilation step performed by the script requires wasmtime-cli 26.0.1 to be installed
 
-5. Run the test_client to call a burst action:
+5. Run the test_client to call an action:
 
 ```sh
 python tests/simple_action_client.py
@@ -65,3 +69,19 @@ python tests/simple_action_client.py
 
 6. For benchmarking a function, use the following benchmarking tool:
 [`openwhisk-bench`](https://github.com/julenbhy/openwhisk-bench/tree/main)
+
+
+## How to use wasi-nn
+
+1.  Replace the step 3 with the following intruction:
+
+```sh
+cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime_nn 
+```
+2.  Run the test_client to call a burst action:
+```sh
+../OW_wasm_executor/tests/wasi-nn$ python pytorch_example.py
+```
+
+
+

@@ -22,14 +22,12 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 
 ow-common = { path = "../ow-common" }
-ow-wasmtime-args = { path = "../ow-wasmtime-args", optional = true  }
-ow-wasmtime-stdio = { path = "../ow-wasmtime-stdio", optional = true  }
-ow-wasmtime-memory = { path = "../ow-wasmtime-memory", optional = true  }
+ow-wasmtime = { path = "../ow-wasmtime", optional = true  }
 ow-wasmtime-component = { path = "../ow-wasmtime-component", optional = true  }
+ow-wasmtime-nn = { path = "../ow-wasmtime-nn", optional = true  }
 
 [features]
-wasmtime_args = ["ow-wasmtime-args"]
-wasmtime_stdio = ["ow-wasmtime-stdio"]
-wasmtime_memory = ["ow-wasmtime-memory"]
+default = ["wasmtime"]
+wasmtime = ["ow-wasmtime"]
 wasmtime_component = ["ow-wasmtime-component"]
-default = ["wasmtime_memory"]
+wasmtime_nn = ["ow-wasmtime-nn"]

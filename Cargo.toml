@@ -2,10 +2,9 @@
 members = [
     "ow-common",
     "ow-executor",
-    "ow-wasmtime-args",
-    "ow-wasmtime-stdio",
-    "ow-wasmtime-memory",
+    "ow-wasmtime",
     "ow-wasmtime-component",
+    "ow-wasmtime-nn",
     "action-builder",
     "action-builder-component"
 ]
@@ -35,6 +34,17 @@ wasmtime-wasi = "26.0.1"
 ow-common = { path = "./ow-common" }
 
 
+wasmtime-wasi-nn = { path = "./crates/wasi-nn", features = ["pytorch"]  }
+thiserror = "1.0.43"
+tracing = "0.1.26"
+wiggle = "26.0.1"
+cap-std = "3.4.1"
+libtest-mimic = "0.7.0"
+test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
+tracing-subscriber = { version = "0.3.1", default-features = false, features = ['fmt', 'env-filter', 'ansi', 'tracing-log'] }
+walkdir = "2.3.3"
+heck = "0.5"
+wit-component = "0.219.1"
 
 [workspace.lints.rust]
 # Turn on some lints which are otherwise allow-by-default in rustc.

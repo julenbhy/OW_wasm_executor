@@ -12,7 +12,7 @@ def sync_call(action_name: str, params: dict):
     start_time = time.time()
     response = requests.post(url, json=params, headers=headers)
     elapsed_time = time.time() - start_time
-    print('REQUEST:', response.request.__dict__)
+    #print('REQUEST:', response.request.__dict__)
     return response.text, elapsed_time
 
 
@@ -45,7 +45,9 @@ def main():
     with open('fixture/kitten.png', 'rb') as image:
         image_bytes = base64.b64encode(image.read()).decode('utf-8')
 
-    req_body = { 'image': image_bytes, 'model': model_link }
+    image = 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcRo8RNvXDcolY6HqEFywzudZcp9SH3USqSaog7RijHSWyNFGsqk'
+
+    req_body = { 'image': image, 'model': model_link }
 
     # make the request
     response ,elapsed_time = sync_call('pytorch', req_body)

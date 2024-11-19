@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use ow_common::{ActionCapabilities, WasmAction, WasmRuntime};
 
 use wasmtime::{Engine, Linker, Module, Store, InstancePre};
-use wasmtime_wasi::{WasiCtxBuilder, DirPerms, FilePerms};
+use wasmtime_wasi::{WasiCtxBuilder};
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 
 use wasmtime_wasi_nn::witx::WasiNnCtx;
@@ -37,11 +37,6 @@ impl Default for Wasmtime {
 const CACHE_TTL: Duration = Duration::from_secs(60);
 
 
-
-
-
-
-
 pub struct WasmCtx {
     wasi: WasiP1Ctx,
     wasi_nn: WasiNnCtx,
@@ -56,13 +51,15 @@ impl WasmCtx {
     }
 }
 
-fn create_store(engine: &Engine) -> Store<WasmCtx> {
+fn create_store(
+    engine: &Engine
+) -> Store<WasmCtx> {
     let wasi = WasiCtxBuilder::new()
         .inherit_stdio()
         .inherit_stderr()
         .build_p1();
 
-    //let graph = [("pytorch", "pytorch_fixtures/mobilenet")];
+    //let graph = vec![("pytorch".to_string(), "models".to_string())]; // Convert to Vec<(String, String)>
     let (backends, registry) = wasmtime_wasi_nn::preload(&[]).unwrap();
     let wasi_nn = WasiNnCtx::new(backends, registry);
 
@@ -74,13 +71,19 @@ fn create_store(engine: &Engine) -> Store<WasmCtx> {
     Store::new(engine, wasm_ctx)
 }
 
-fn link_host_functions(linker: &mut Linker<WasmCtx>) -> Result<(), anyhow::Error> {
+fn link_host_functions(
+    linker: &mut Linker<WasmCtx>
+) -> Result<(), anyhow::Error> {
     preview1::add_to_linker_sync(linker, WasmCtx::wasi)?;
     wasmtime_wasi_nn::witx::add_to_linker(linker, WasmCtx::wasi_nn)?;
     Ok(())
 }
 
-fn pass_input(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>, input: &str) -> Result<(), anyhow::Error> {
+fn pass_input(
+    instance: &wasmtime::Instance, 
+    store: &mut Store<WasmCtx>, 
+    input: &str
+) -> Result<(), anyhow::Error> {
     // Access the WASM memory
     let memory = instance
         .get_memory(&mut *store, "memory")
@@ -99,25 +102,11 @@ fn pass_input(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>, input: 
     Ok(())
 }
 
-fn pass_model(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>, model_bytes: &[u8]) -> Result<(), anyhow::Error> {
-    // Access the WASM memory
-    let memory = instance
-        .get_memory(&mut *store, "memory")
-        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
 
-    // Obtain the pointer to the model with set_model
-    let set_model = instance
-        .get_typed_func::<u32, u32>(&mut *store, "set_model")
-        .map_err(|_| anyhow::anyhow!("Failed to get set_model"))?;
-    let model_ptr = set_model.call(&mut *store, model_bytes.len() as u32)? as usize;
-
-    // Write the model to the WASM memory
-    memory.data_mut(&mut *store)[model_ptr..(model_ptr + model_bytes.len())].copy_from_slice(model_bytes);
-
-    Ok(())
-}
-
-fn retrieve_result(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>) -> Result<String, anyhow::Error> {
+fn retrieve_result(
+    instance: &wasmtime::Instance, 
+    store: &mut Store<WasmCtx>
+) -> Result<String, anyhow::Error> {
     // Accede a la memoria del módulo WASM
     let memory = instance
         .get_memory(&mut *store, "memory")
@@ -144,6 +133,80 @@ fn retrieve_result(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>) ->
     Ok(result)
 }
 
+
+fn pass_model(
+    instance: &wasmtime::Instance, 
+    store: &mut Store<WasmCtx>,
+    parameters: &serde_json::Value,
+    model_cache: &Arc<TimedMap<String, Vec<u8>>>
+) -> Result<(), anyhow::Error> {
+    
+    let model_key = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?.to_string();
+    
+    // Check if the model is already in the cache
+    let model_bytes = if let Some(cached_bytes) = model_cache.get(&model_key) {
+        println!("Model found in cache. Using cached model...");
+        model_cache.refresh(&model_key, CACHE_TTL);
+        cached_bytes.clone()
+    } else {
+        println!("Model not found in cache. Downloading model...");
+        let downloaded_bytes = reqwest::blocking::get(&model_key)?.bytes()?.to_vec();
+        model_cache.insert(model_key.clone(), downloaded_bytes.clone(), CACHE_TTL);
+        downloaded_bytes
+    };
+
+    // Access the WASM memory
+    let memory = instance
+        .get_memory(&mut *store, "memory")
+        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+    // Obtain the pointer to the model with set_model
+    let set_model = instance
+        .get_typed_func::<u32, u32>(&mut *store, "set_model")
+        .map_err(|_| anyhow::anyhow!("Failed to get set_model"))?;
+    let model_ptr = set_model.call(&mut *store, model_bytes.len() as u32)? as usize;
+
+    // Write the model to the WASM memory
+    memory.data_mut(&mut *store)[model_ptr..(model_ptr + model_bytes.len())].copy_from_slice(&model_bytes);
+
+    Ok(())
+}
+
+
+fn replace_image_urls(
+    parameters: &mut serde_json::Value
+) -> anyhow::Result<()> {
+    if let Some(image_value) = parameters.get_mut("image") {
+        match image_value {
+            // Caso: 'image' es una cadena
+            serde_json::Value::String(image) => {
+                let image_url = image.as_str(); // Tomamos una referencia inmutable
+                let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
+                *image_value = serde_json::Value::String(base64::encode(&image_bytes));
+            }
+            // Caso: 'image' es una lista de cadenas
+            serde_json::Value::Array(images) => {
+                let mut encoded_images = Vec::new();
+                for image in images.iter() {
+                    if let Some(image_url) = image.as_str() {
+                        let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
+                        encoded_images.push(serde_json::Value::String(base64::encode(&image_bytes)));
+                    } else {
+                        return Err(anyhow!("From embedder: 'image' list contains a non-string value"));
+                    }
+                }
+                *image_value = serde_json::Value::Array(encoded_images);
+            }
+            // Caso: 'image' no es ni una cadena ni una lista
+            _ => {
+                return Err(anyhow!("From embedder: 'image' is not a string or a list of strings"));
+            }
+        }
+    } else {
+        return Err(anyhow!("From embedder: 'image' not found in JSON"));
+    }
+    Ok(())
+}
 
 
 impl WasmRuntime for Wasmtime {
@@ -200,26 +263,15 @@ impl WasmRuntime for Wasmtime {
         mut parameters: serde_json::Value,
     ) -> Result<Result<serde_json::Value, serde_json::Value>, anyhow::Error> {
         
-        // Replace the model download url with the model bytes  
-        let model_key = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?.to_string();
-        
-        let model_bytes = if let Some(cached_bytes) = self.model_cache.get(&model_key) {
-            println!("Model found in cache. Using cached model...");
-            self.model_cache.refresh(&model_key, CACHE_TTL);
-            cached_bytes.clone()
-        } else {
-            println!("Model not found in cache. Downloading model...");
-            let downloaded_bytes = reqwest::blocking::get(&model_key)?.bytes()?.to_vec();
-            self.model_cache.insert(model_key.clone(), downloaded_bytes.clone(), CACHE_TTL);
-            downloaded_bytes
-        };
-        //parameters["model"] = serde_json::Value::String(base64::encode(model_bytes));
 
         let wasm_action = self
             .instance_pres
             .get(container_id)
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
+
+        // Replace the image URLs with their base64-encoded contents
+        replace_image_urls(&mut parameters)?;
 
         // Manage parameter passing
         let serialized_input = serde_json::to_string(&parameters)?;
@@ -233,8 +285,8 @@ impl WasmRuntime for Wasmtime {
         // Write the input to the WASM memory
         pass_input(&instance, &mut store, &input)?;
 
-        // Write the model bytes to the WASM memory
-        pass_model(&instance, &mut store, &model_bytes)?;
+        // Write the model to the WASM memory
+        pass_model(&instance, &mut store, &parameters, &self.model_cache)?;
 
         // Call the _start function
         let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();
@@ -247,7 +299,10 @@ impl WasmRuntime for Wasmtime {
         Ok(Ok(response))
     }
 
-    fn destroy(&self, container_id: &str) {
+    fn destroy(
+        &self, 
+        container_id: &str
+) {
         if let None = self.instance_pres.remove(container_id) {
             println!("No container with id {} existed.", container_id);
         }

@@ -78,7 +78,13 @@ python tests/simple_action_client.py
 ```sh
 cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime_nn 
 ```
-2.  Run the test_client to call a burst action:
+
+2. Build and upload 'pytorch_example' 
+```sh
+./actions/compile.sh actions/pytorch_example.rs memory
+```
+
+3.  Run the test_client to call a burst action:
 ```sh
 ../OW_wasm_executor/tests/wasi-nn$ python pytorch_example.py
 ```

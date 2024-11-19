@@ -3,15 +3,9 @@ use image::{DynamicImage, RgbImage};
 use wasi_nn::{self, ExecutionTarget, GraphBuilder, GraphEncoding};
 use base64;
 
-pub fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error> {
+pub fn func(json: serde_json::Value, model_bytes: &[u8]) -> Result<serde_json::Value, anyhow::Error> {
 
-    
-    // Get the model
-    let model_base64 = json["model"].as_str().ok_or_else(|| {
-        anyhow::anyhow!("From wasm: 'model' not found or not a string in JSON")
-    })?;
-    let model_bytes = base64::decode(model_base64)?;
-
+    //let model_bytes = unsafe { std::slice::from_raw_parts(MODEL, MODEL_LEN) };
 
     let graph = GraphBuilder::new(GraphEncoding::Pytorch, ExecutionTarget::CPU)
         .build_from_bytes(&[&model_bytes])?;

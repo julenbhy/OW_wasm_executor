@@ -74,7 +74,7 @@ fn create_store(engine: &Engine) -> Store<WasmCtx> {
     Store::new(engine, wasm_ctx)
 }
 
-pub fn link_host_functions(linker: &mut Linker<WasmCtx>) -> Result<(), anyhow::Error> {
+fn link_host_functions(linker: &mut Linker<WasmCtx>) -> Result<(), anyhow::Error> {
     preview1::add_to_linker_sync(linker, WasmCtx::wasi)?;
     wasmtime_wasi_nn::witx::add_to_linker(linker, WasmCtx::wasi_nn)?;
     Ok(())
@@ -99,6 +99,23 @@ fn pass_input(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>, input: 
     Ok(())
 }
 
+fn pass_model(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>, model_bytes: &[u8]) -> Result<(), anyhow::Error> {
+    // Access the WASM memory
+    let memory = instance
+        .get_memory(&mut *store, "memory")
+        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+    // Obtain the pointer to the model with set_model
+    let set_model = instance
+        .get_typed_func::<u32, u32>(&mut *store, "set_model")
+        .map_err(|_| anyhow::anyhow!("Failed to get set_model"))?;
+    let model_ptr = set_model.call(&mut *store, model_bytes.len() as u32)? as usize;
+
+    // Write the model to the WASM memory
+    memory.data_mut(&mut *store)[model_ptr..(model_ptr + model_bytes.len())].copy_from_slice(model_bytes);
+
+    Ok(())
+}
 
 fn retrieve_result(instance: &wasmtime::Instance, store: &mut Store<WasmCtx>) -> Result<String, anyhow::Error> {
     // Accede a la memoria del módulo WASM
@@ -196,7 +213,7 @@ impl WasmRuntime for Wasmtime {
             self.model_cache.insert(model_key.clone(), downloaded_bytes.clone(), CACHE_TTL);
             downloaded_bytes
         };
-        parameters["model"] = serde_json::Value::String(base64::encode(model_bytes));
+        //parameters["model"] = serde_json::Value::String(base64::encode(model_bytes));
 
         let wasm_action = self
             .instance_pres
@@ -215,6 +232,9 @@ impl WasmRuntime for Wasmtime {
 
         // Write the input to the WASM memory
         pass_input(&instance, &mut store, &input)?;
+
+        // Write the model bytes to the WASM memory
+        pass_model(&instance, &mut store, &model_bytes)?;
 
         // Call the _start function
         let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();

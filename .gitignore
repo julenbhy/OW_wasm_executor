@@ -11,12 +11,14 @@ build
 */examples
 
 # Ignore othere files
+Cargo.lock
 action-builder-component/src/bindings.rs
 action-builder-component/src/lib.rs
 action-builder-component/src/lib.rs
 action-builder/Cargo.toml
 action-builder-component/Cargo.toml
 tests/simple_action_client.py
+**/model.pt
 
 # Ignore all files under crates
-crates
+#crates

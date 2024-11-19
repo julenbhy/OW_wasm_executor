@@ -48,7 +48,7 @@ def main():
     req_body = { 'image': image_bytes, 'model': model_link }
 
     # make the request
-    response ,elapsed_time = sync_call('pytorch_example', req_body)
+    response ,elapsed_time = sync_call('pytorch', req_body)
 
     print('\nRESPONSE:', response)
     print('TIME TAKEN:', elapsed_time)

@@ -7,7 +7,7 @@ export WASMTIME
 
 
 # Supported methods
-INPUT_METHODS=("memory" "component")
+INPUT_METHODS=("memory" "component" "nn_memory")
 
 
 # Check if the necessary arguments are passed

@@ -184,21 +184,19 @@ impl WasmRuntime for Wasmtime {
     ) -> Result<Result<serde_json::Value, serde_json::Value>, anyhow::Error> {
         
         // Replace the model download url with the model bytes  
-        let model = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?;
-        // check if the model is in the cache
-        if let Some(model_bytes) = self.model_cache.get(&model.to_string()) {
+        let model_key = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?.to_string();
+        
+        let model_bytes = if let Some(cached_bytes) = self.model_cache.get(&model_key) {
             println!("Model found in cache. Using cached model...");
-            self.model_cache.refresh(&model.to_string(), CACHE_TTL);
-            parameters["model"] = serde_json::Value::String(base64::encode(model_bytes.clone()));
+            self.model_cache.refresh(&model_key, CACHE_TTL);
+            cached_bytes.clone()
         } else {
             println!("Model not found in cache. Downloading model...");
-            let model_bytes = reqwest::blocking::get(model)?.bytes()?;
-            self.model_cache.insert(model.to_string(), model_bytes.to_vec(), CACHE_TTL);
-            parameters["model"] = serde_json::Value::String(base64::encode(model_bytes));
-        }
-
-        //load_model(&self.model_cache, &mut parameters)?;
-
+            let downloaded_bytes = reqwest::blocking::get(&model_key)?.bytes()?.to_vec();
+            self.model_cache.insert(model_key.clone(), downloaded_bytes.clone(), CACHE_TTL);
+            downloaded_bytes
+        };
+        parameters["model"] = serde_json::Value::String(base64::encode(model_bytes));
 
         let wasm_action = self
             .instance_pres

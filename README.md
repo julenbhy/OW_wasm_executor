@@ -79,6 +79,14 @@ python tests/simple_action_client.py
 cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime_nn 
 ```
 
+**_NOTE:_**  Take care you will need to install torch 2.4.0 to use the wasi-nn executor.
+
+```sh
+export LIBTORCH_USE_PYTORCH=1
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/Downloads/libtorch-shared-with-deps-2.4.0+cu118/libtorch/lib
+```
+
+
 2. Build and upload 'pytorch_example' 
 ```sh
 ./actions/compile.sh actions/pytorch_example.rs memory
@@ -88,6 +96,8 @@ cargo run --manifest-path ./ow-executor/Cargo.toml --release --features wasmtime
 ```sh
 ../OW_wasm_executor/tests/wasi-nn$ python pytorch_example.py
 ```
+
+
 
 
 

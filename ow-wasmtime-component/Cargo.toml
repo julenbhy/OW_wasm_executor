@@ -13,6 +13,5 @@ serde = { workspace = true }
 fasthash = { workspace = true }
 
 wasmtime = { workspace = true }
-wasi-common = { workspace = true }
 wasmtime-wasi = { workspace = true }
 ow-common = { workspace = true }

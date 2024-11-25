@@ -19,6 +19,12 @@ authors = ["Julen Bohoyo <julen.bohoyo@urv.cat>"]
 edition = "2021"
 
 [workspace.dependencies]
+wasmtime = "26.0.1"
+wasi-common = "26.0.1"
+wasmtime-wasi = "26.0.1"
+ow-common = { path = "./ow-common" }
+
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.117"
 anyhow = "1.0.83"
@@ -27,12 +33,6 @@ zip = "0.5.13"
 dashmap = "5.5.3"
 timedmap = "1.0.2"
 fasthash = "0.4.0"
-
-wasmtime = "26.0.1"
-wasi-common = "26.0.1"
-wasmtime-wasi = "26.0.1"
-ow-common = { path = "./ow-common" }
-
 
 wasmtime-wasi-nn = { path = "./crates/wasi-nn", features = ["pytorch"]  }
 thiserror = "1.0.43"
@@ -45,6 +45,9 @@ tracing-subscriber = { version = "0.3.1", default-features = false, features = [
 walkdir = "2.3.3"
 heck = "0.5"
 wit-component = "0.219.1"
+reqwest = { version = "0.11", features = ["blocking"] }
+
+
 
 [workspace.lints.rust]
 # Turn on some lints which are otherwise allow-by-default in rustc.

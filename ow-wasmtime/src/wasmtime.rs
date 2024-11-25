@@ -29,51 +29,6 @@ const CACHE_TTL: Duration = Duration::from_secs(60);
 
 
 
-fn pass_input(instance: &wasmtime::Instance, store: &mut Store<WasiCtx>, input: &str) -> Result<(), anyhow::Error> {
-    // Access the WASM memory
-    let memory = instance
-        .get_memory(&mut *store, "memory")
-        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
-
-    // Obtain the pointer to the input with set_input
-    let set_input = instance
-        .get_typed_func::<u32, u32>(&mut *store, "set_input")
-        .map_err(|_| anyhow::anyhow!("Failed to get set_input"))?;
-    let input_ptr = set_input.call(&mut *store, input.len() as u32)? as usize;
-
-    // Write the input to the WASM memory
-    let content = input.as_bytes();
-    memory.data_mut(&mut *store)[input_ptr..(input_ptr + content.len())].copy_from_slice(content);
-
-    Ok(())
-}
-
-fn retrieve_result(instance: &wasmtime::Instance, store: &mut Store<WasiCtx>) -> Result<String> {
-    // Acces the WASM memory
-    let memory = instance
-        .get_memory(&mut *store, "memory")
-        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
-
-    // Obtain the length of the result with get_result_len
-    let get_result_len = instance
-        .get_typed_func::<(), u32>(&mut *store, "get_result_len")
-        .map_err(|_| anyhow::anyhow!("Failed to get get_result_len"))?;
-    let length = get_result_len.call(&mut *store, ())? as usize;
-
-    // Obtain the pointer to the result with get_result
-    let get_result = instance
-        .get_typed_func::<(), u32>(&mut *store, "get_result")
-        .map_err(|_| anyhow::anyhow!("Failed to get get_result"))?;
-    let content_ptr = get_result.call(&mut *store, ())? as usize;
-
-    // Read the result from the WASM memory
-    let content = memory.data(&store)[content_ptr..(content_ptr + length)].to_vec();
-    let result = String::from_utf8(content)?;
-
-    Ok(result)
-}
-
-
 impl WasmRuntime for Wasmtime {
     fn initialize(
         &self,
@@ -134,11 +89,6 @@ impl WasmRuntime for Wasmtime {
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
 
-        // Manage parameter passing
-        let serialized_input = serde_json::to_string(&parameters)?;
-        let input = serialized_input.clone();
-        //println!("Input: {:?}", input);
-
         // Create a WASI context and put it in a Store
         let wasi = WasiCtxBuilder::new()
             .inherit_stdio()
@@ -150,7 +100,7 @@ impl WasmRuntime for Wasmtime {
         let instance = instance_pre.instantiate(&mut store).unwrap();
 
         // Write the input to the WASM memory
-        pass_input(&instance, &mut store, &input)?;
+        pass_input(&instance, &mut store, &parameters)?;
 
         // Call the _start function
         let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();
@@ -158,12 +108,15 @@ impl WasmRuntime for Wasmtime {
 
         // Retrieve the result from the WASM memory
         let result = retrieve_result(&instance, &mut store)?;
-        let response = serde_json::from_str(&result)?;
 
-        Ok(Ok(response))
+        Ok(Ok(result))
     }
 
-    fn destroy(&self, container_id: &str) {
+
+    fn destroy(
+        &self, 
+        container_id: &str
+    ) {
         if let None = self.instance_pres.remove(container_id) {
             println!("No container with id {} existed.", container_id);
         }
@@ -171,3 +124,60 @@ impl WasmRuntime for Wasmtime {
 
 }
 
+
+
+fn pass_input(
+    instance: &wasmtime::Instance, 
+    store: &mut Store<WasiCtx>, 
+    parameters: &serde_json::Value
+) -> Result<(), anyhow::Error> {
+
+    let input = parameters.to_string();
+    // Access the WASM memory
+    let memory = instance
+        .get_memory(&mut *store, "memory")
+        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+    // Obtain the pointer to the input with set_input
+    let set_input = instance
+        .get_typed_func::<u32, u32>(&mut *store, "set_input")
+        .map_err(|_| anyhow::anyhow!("Failed to get set_input"))?;
+    let input_ptr = set_input.call(&mut *store, input.len() as u32)? as usize;
+
+    // Write the input to the WASM memory
+    let content = input.as_bytes();
+    memory.data_mut(&mut *store)[input_ptr..(input_ptr + content.len())].copy_from_slice(content);
+
+    Ok(())
+}
+
+fn retrieve_result(
+    instance: &wasmtime::Instance, 
+    store: &mut Store<WasiCtx>
+) -> Result<serde_json::Value> {
+
+    // Acces the WASM memory
+    let memory = instance
+        .get_memory(&mut *store, "memory")
+        .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+
+    // Obtain the length of the result with get_result_len
+    let get_result_len = instance
+        .get_typed_func::<(), u32>(&mut *store, "get_result_len")
+        .map_err(|_| anyhow::anyhow!("Failed to get get_result_len"))?;
+    let length = get_result_len.call(&mut *store, ())? as usize;
+
+    // Obtain the pointer to the result with get_result
+    let get_result = instance
+        .get_typed_func::<(), u32>(&mut *store, "get_result")
+        .map_err(|_| anyhow::anyhow!("Failed to get get_result"))?;
+    let content_ptr = get_result.call(&mut *store, ())? as usize;
+
+    // Read the result from the WASM memory
+    let content = memory.data(&store)[content_ptr..(content_ptr + length)].to_vec();
+    let result = String::from_utf8(content)?;
+
+    let json_result: serde_json::Value = serde_json::from_str(&result)?;
+
+    Ok(json_result)
+}

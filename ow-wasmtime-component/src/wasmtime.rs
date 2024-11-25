@@ -2,17 +2,22 @@ use std::{sync::Arc, time::Duration,};
 use dashmap::DashMap;
 use timedmap::TimedMap;
 use anyhow::anyhow;
+
 use ow_common::{ActionCapabilities, WasmAction, WasmRuntime};
 
-use wasmtime::*;
-use wasmtime::component::{Linker, Component};
+use wasmtime::{Engine, Store};
+use wasmtime::component::{Linker, Component, InstancePre};
 use wasmtime_wasi::{WasiCtx, WasiView, WasiCtxBuilder, ResourceTable};
+
+
+
+
 
 #[derive(Clone)]
 pub struct Wasmtime {
     pub engine: Engine,
-    pub instance_pres: Arc<DashMap<String, WasmAction< component::InstancePre<MyState> >>>,
-    pub instance_pre_cache: Arc<TimedMap<u64, component::InstancePre<MyState>>>, // TODO: Remove unused instance_pres after an unusedTimeout
+    pub instance_pres: Arc<DashMap<String, WasmAction< InstancePre<MyState> >>>,
+    pub instance_pre_cache: Arc<TimedMap<u64, InstancePre<MyState>>>, // TODO: Remove unused instance_pres after an unusedTimeout
 }
 
 impl Default for Wasmtime {
@@ -26,6 +31,23 @@ impl Default for Wasmtime {
 }
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
+
+
+pub struct MyState {
+    ctx: WasiCtx,
+    table: ResourceTable,
+}
+
+impl WasiView for MyState {
+    fn ctx(&mut self) -> &mut WasiCtx { 
+        &mut self.ctx 
+    }
+
+    fn table(&mut self) -> &mut ResourceTable { 
+        &mut self.table 
+    }
+}
+
 
 impl WasmRuntime for Wasmtime {
     fn initialize(
@@ -56,7 +78,7 @@ impl WasmRuntime for Wasmtime {
 
             // Add WASI to the linker
             let mut linker = Linker::<MyState>::new(&self.engine);
-            wasmtime_wasi::add_to_linker_sync(&mut linker)?;
+            link_host_functions(&mut linker)?;
 
             let instance_pre = linker.instantiate_pre(&module)?;
 
@@ -87,21 +109,13 @@ impl WasmRuntime for Wasmtime {
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
 
-        // Manage parameter passing
-        let serialized_input = serde_json::to_string(&parameters)?;
-        let input = serialized_input.clone();
-
-        let mut output = [wasmtime::component::Val::String("".into())];
-
-        // Create a WASI context and put it in a Store
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .inherit_stderr()
-            .build();
-
-        let mut store = Store::new(&self.engine, MyState { ctx: wasi, table: ResourceTable::new(),},);
+        let mut store = create_store(&self.engine);
 
         let instance = instance_pre.instantiate(&mut store).unwrap();
+
+        // Manage parameter passing
+        let input = serde_json::to_string(&parameters)?;
+        let mut output = [wasmtime::component::Val::String("".into())];
 
         // Call the `func-wrapper` function
         let func = instance.get_func(&mut store, "func-wrapper").expect("func-wrapper export not found");
@@ -123,12 +137,28 @@ impl WasmRuntime for Wasmtime {
     }
 }
 
-struct MyState {
-    ctx: WasiCtx,
-    table: ResourceTable,
+
+fn create_store(
+    engine: &Engine,
+) -> Store<MyState> {
+
+    let wasi = WasiCtxBuilder::new()
+        .inherit_stdio()
+        .inherit_stderr()
+        .build();
+
+    let wasi_state = MyState { 
+        ctx: wasi, 
+        table: ResourceTable::new() 
+    };
+
+    Store::new(engine, wasi_state)
 }
 
-impl WasiView for MyState {
-    fn ctx(&mut self) -> &mut WasiCtx { &mut self.ctx }
-    fn table(&mut self) -> &mut ResourceTable { &mut self.table }
+
+fn link_host_functions(
+    linker: &mut Linker<MyState>
+) -> Result<(), anyhow::Error> {
+    wasmtime_wasi::add_to_linker_sync(linker)?;
+    Ok(())
 }

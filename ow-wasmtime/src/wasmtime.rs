@@ -12,7 +12,7 @@ use wasi_common::WasiCtx;
 pub struct Wasmtime {
     pub engine: Engine,
     pub instance_pres: Arc<DashMap<String, WasmAction< InstancePre<WasiCtx> >>>,
-    pub instance_pre_cache: Arc<TimedMap<u64, InstancePre<WasiCtx>>>, // TODO: Remove unused instance_pres after an unusedTimeout
+    pub instance_pre_cache: Arc<TimedMap<u64, InstancePre<WasiCtx>>>
 }
 
 impl Default for Wasmtime {
@@ -58,7 +58,7 @@ impl WasmRuntime for Wasmtime {
 
             // Add WASI to the linker
             let mut linker: wasmtime::Linker<WasiCtx> = Linker::new(&self.engine);
-            wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
+            link_host_functions(&mut linker)?;
 
             let instance_pre = linker.instantiate_pre(&module)?;
 
@@ -89,13 +89,7 @@ impl WasmRuntime for Wasmtime {
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
 
-        // Create a WASI context and put it in a Store
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .inherit_stderr()
-            .build();
-
-        let mut store = Store::new(&self.engine, wasi);
+        let mut store = create_store(&self.engine);
 
         let instance = instance_pre.instantiate(&mut store).unwrap();
 
@@ -124,6 +118,25 @@ impl WasmRuntime for Wasmtime {
 
 }
 
+
+fn create_store(
+    engine: &Engine
+) -> Store<WasiCtx> {
+    let wasi = WasiCtxBuilder::new()
+        .inherit_stdio()
+        .inherit_stderr()
+        .build();
+
+    Store::new(engine, wasi)
+}
+
+
+fn link_host_functions(
+    linker: &mut wasmtime::Linker<WasiCtx>
+) -> Result<(), anyhow::Error> {
+    wasi_common::sync::add_to_linker(linker, |s| s)?;
+    Ok(())
+}
 
 
 fn pass_input(

@@ -3,6 +3,7 @@ use ow_common::{util, ActivationContext, ActivationInit, ActivationResponse, Was
 use serde::Serialize;
 use tide::{Request, StatusCode};
 
+#[allow(dead_code)]
 #[derive(Serialize)]
 struct RuntimeResponse {
     #[serde(rename(serialize = "containerId"))]

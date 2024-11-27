@@ -59,7 +59,7 @@ cargo run --manifest-path ./ow-executor/Cargo.toml --release
 
 This will add all the required dependencies for the selected execution model and compile it using the action builder crate. The script will also add the function to OpenWhisk.
 
-Note that the precompilation step performed by the script requires wasmtime-cli 26.0.1 to be installed
+Note that the precompilation step performed by the script requires wasmtime-cli 27.0.0 to be installed
 
 5. Run the test_client to call an action:
 

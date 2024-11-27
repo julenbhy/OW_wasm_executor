@@ -2,7 +2,7 @@
 
 set -e
 
-WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v26.0.1-x86_64-linux/wasmtime"}
+WASMTIME=${WASMTIME_PATH:-"/opt/wasmtime-v27.0.0-x86_64-linux/wasmtime"}
 export WASMTIME
 
 
@@ -28,9 +28,9 @@ if [[ ! " ${INPUT_METHODS[@]} " =~ " ${METHOD} " ]]; then
     exit 1
 fi
 
-# Check if the version matches the required version (26.0.1)
-if [ "$($WASMTIME --version)" != "wasmtime 26.0.1 (c138e08bf 2024-11-05)" ]; then
-    echo "The version of wasmtime is not 26.0.1. Please install the correct version."
+# Check if the version matches the required version (27.0.0)
+if [ "$($WASMTIME --version)" != "wasmtime 27.0.0 (8eefa236f 2024-11-20)" ]; then
+    echo "The version of wasmtime is not 27.0.0. Please install the correct version."
     exit 1
 fi
 

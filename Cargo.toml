@@ -20,9 +20,9 @@ authors = ["Julen Bohoyo <julen.bohoyo@urv.cat>"]
 edition = "2021"
 
 [workspace.dependencies]
-wasmtime = "26.0.1"
-wasi-common = "26.0.1"
-wasmtime-wasi = "26.0.1"
+wasmtime = "27.0.0"
+wasi-common = "27.0.0"
+wasmtime-wasi = "27.0.0"
 ow-common = { path = "./ow-common" }
 
 serde = { version = "1.0", features = ["derive"] }
@@ -34,7 +34,8 @@ dashmap = "5.5.3"
 timedmap = "1.0.2"
 fasthash = "0.4.0"
 
-wasmtime-wasi-nn = { path = "./crates/wasi-nn", features = ["pytorch"]  }
+#wasmtime-wasi-nn = { path = "./crates/wasi-nn", features = ["pytorch"]  }
+wasmtime-wasi-nn = { version = "27.0.0", features = ["pytorch"]  }
 thiserror = "1.0.43"
 tracing = "0.1.26"
 wiggle = "26.0.1"

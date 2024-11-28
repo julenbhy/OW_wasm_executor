@@ -34,6 +34,10 @@ zip = "0.5.13"
 dashmap = "5.5.3"
 timedmap = "1.0.2"
 fasthash = "0.4.0"
+rayon = "1.10.0"
+aws-sdk-s3 = "1.62.0"
+aws-config = "1.5.10"
+tokio = "1.41.1"
 
 #wasmtime-wasi-nn = { path = "./crates/wasi-nn", features = ["pytorch"]  }
 wasmtime-wasi-nn = { version = "27.0.0", features = ["pytorch"]  }

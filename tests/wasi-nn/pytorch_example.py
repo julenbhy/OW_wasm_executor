@@ -42,9 +42,6 @@ def main():
 
     # build the request json
     model_link = 'https://github.com/rahulchaphalkar/libtorch-models/releases/download/v0.1/squeezenet1_1.pt'
-    with open('fixture/kitten.png', 'rb') as image:
-        image_bytes = base64.b64encode(image.read()).decode('utf-8')
-
     image = 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcRo8RNvXDcolY6HqEFywzudZcp9SH3USqSaog7RijHSWyNFGsqk'
 
     req_body = { 'image': image, 'model': model_link }

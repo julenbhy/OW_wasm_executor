@@ -94,7 +94,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/Downloads/libtorch-shared-with-deps-2.
 
 3.  Run the test_client to call a burst action:
 ```sh
-../OW_wasm_executor/tests/wasi-nn$ python pytorch_example.py
+python tests/wasi-nn/pytorch_example.py 
 ```
 
 

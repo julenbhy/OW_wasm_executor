@@ -1,20 +1,35 @@
-#[allow(warnings)]
-mod bindings;
+#[cfg(feature = "component")]
+wit_bindgen::generate!({
+    path: "wit",
+    world: "simple",
+});
 
-use bindings::Guest;
+#[cfg(feature = "component_nn")]
+wit_bindgen::generate!({
+    path: "wit",
+    world: "nn",
+});
 
-struct Component;
+#[cfg(feature = "component_nn")]
+use self::wasi::nn::{
+    graph::{Graph, GraphBuilder, load, ExecutionTarget, GraphEncoding},
+    tensor::{Tensor, TensorData, TensorDimensions, TensorType},
+};
 
-impl Guest for Component {
+
+
+struct MyWorld;
+impl Guest for MyWorld {
     fn func_wrapper(json_string: std::string::String) -> std::string::String {
         let json: serde_json::Value = serde_json::from_str(&json_string).unwrap();
         let result = func(json).unwrap();
-        // println!("From WASM:\n\tResult: {}", result);
         result.to_string()
     }
 }
+export!(MyWorld);
 
-bindings::export!(Component with_types_in bindings);
+
+
 
 
 // The function that will be called by the wrapper will be added bellow

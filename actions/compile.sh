@@ -7,7 +7,7 @@ export WASMTIME
 
 
 # Supported methods
-INPUT_METHODS=("memory" "component" "nn_memory")
+INPUT_METHODS=("memory" "memory_nn" "component" "component_nn")
 
 
 # Check if the necessary arguments are passed
@@ -34,9 +34,9 @@ if [ "$($WASMTIME --version)" != "wasmtime 27.0.0 (8eefa236f 2024-11-20)" ]; the
     exit 1
 fi
 
-# If the METHOD is component, call compile_component.sh $INPUT_FILE
-if [ "$METHOD" == "component" ]; then
-    ./actions/compile_component.sh "$INPUT_FILE"
+# If the METHOD is component or component_nn, call compile_component.sh $INPUT_FILE
+if [ "$METHOD" == "component" ] || [ "$METHOD" == "component_nn" ]; then
+    ./actions/compile_component.sh "$INPUT_FILE" "$METHOD"
     exit 0
 fi
 
@@ -80,7 +80,7 @@ FEATURE="${METHOD}_method"
 
 # Compile the file with the selected METHOD feature
 echo "Compiling with $METHOD method."
-cargo build --manifest-path ./"$BUILDER"/Cargo.toml --release --example "$FILENAME" --target wasm32-wasi
+cargo build --manifest-path ./"$BUILDER"/Cargo.toml --release --example "$FILENAME" --target wasm32-wasip1
 
 
 # Check if the compilation was successful
@@ -92,7 +92,7 @@ fi
 mkdir -p "actions/compiled"
 
 # Compile the WASM to a .cwasm file
-$WASMTIME compile "target/wasm32-wasi/release/examples/$FILENAME.wasm" -o "./actions/compiled/$FILENAME.cwasm"
+$WASMTIME compile "target/wasm32-wasip1/release/examples/$FILENAME.wasm" -o "./actions/compiled/$FILENAME.cwasm"
 
 # Package the .cwasm file into a zip
 zip "./actions/compiled/$FILENAME.zip" "./actions/compiled/$FILENAME.cwasm"

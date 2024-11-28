@@ -6,6 +6,7 @@ echo "This script should only be called by compile.sh."
 
 # Input variables
 INPUT_FILE="$1"        # Original filename
+METHOD="$2"            # Method selected by the user
 
 FILENAME=$(basename "$INPUT_FILE" .rs) # Filename without the path and extension
 BUILDER="action-builder-component"
@@ -32,9 +33,9 @@ done
 cp "$BUILDER/src/lib_template.rs" "$BUILDER/src/lib.rs"
 cat "$INPUT_FILE" >> "$BUILDER/src/lib.rs"
 
-# Compile the file with the selected parser feature
+# Compile the file with the selected method feature
 echo "Compiling with component parser"
-cargo component build --manifest-path ./"$BUILDER"/Cargo.toml --release
+cargo build --manifest-path ./"$BUILDER"/Cargo.toml --release --target wasm32-wasip2 --features "$METHOD"
 
 # Check if the compilation was successful
 if [ $? -ne 0 ]; then
@@ -45,7 +46,7 @@ fi
 mkdir -p "actions/compiled"
 
 # Compile the WASM to a .cwasm file
-$WASMTIME compile "target/wasm32-wasi/release/action_component.wasm" -o "./actions/compiled/$FILENAME.cwasm"
+$WASMTIME compile "target/wasm32-wasip2/release/action_component.wasm" -o "./actions/compiled/$FILENAME.cwasm"
 
 # Package the .cwasm file into a zip
 zip "./actions/compiled/$FILENAME.zip" "./actions/compiled/$FILENAME.cwasm"

@@ -89,7 +89,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/Downloads/libtorch-shared-with-deps-2.
 
 2. Build and upload 'pytorch.rs' example
 ```sh
-./actions/compile.sh actions/pytorch.rs nn_memory
+./actions/compile.sh actions/pytorch.rs memory_nn
 ```
 
 3.  Run the test_client to call a burst action:

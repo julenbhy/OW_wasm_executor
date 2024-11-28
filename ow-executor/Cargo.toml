@@ -23,11 +23,14 @@ anyhow = { workspace = true }
 
 ow-common = { path = "../ow-common" }
 ow-wasmtime = { path = "../ow-wasmtime", optional = true  }
-ow-wasmtime-component = { path = "../ow-wasmtime-component", optional = true  }
 ow-wasmtime-nn = { path = "../ow-wasmtime-nn", optional = true  }
+ow-wasmtime-component = { path = "../ow-wasmtime-component", optional = true  }
+ow-wasmtime-component-nn = { path = "../ow-wasmtime-component-nn", optional = true  }
+
 
 [features]
 default = ["wasmtime"]
 wasmtime = ["ow-wasmtime"]
-wasmtime_component = ["ow-wasmtime-component"]
 wasmtime_nn = ["ow-wasmtime-nn"]
+wasmtime_component = ["ow-wasmtime-component"]
+wasmtime_component_nn = ["ow-wasmtime-component-nn"]

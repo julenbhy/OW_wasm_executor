@@ -1,0 +1,20 @@
+[package]
+name = "ow-wasmtime-component-nn"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+dashmap = { workspace = true }
+timedmap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+fasthash = { workspace = true }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-nn = { workspace = true}
+ow-common = { workspace = true }

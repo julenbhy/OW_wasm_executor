@@ -6,16 +6,18 @@ static ADDRESS: &str = "127.0.0.1:9000";
 async fn main() -> anyhow::Result<()> {
 
     
-    #[cfg(all(feature = "wasmtime", not(feature = "wasmtime_component"), not(feature = "wasmtime_nn")))]
+    #[cfg(all(feature = "wasmtime", not(feature = "wasmtime_nn"), not(feature = "wasmtime_component"), not(feature = "wasmtime_component_nn") ))]
     let runtime = ow_wasmtime::Wasmtime::default();
-
-    #[cfg(feature = "wasmtime_component")]
-    let runtime = ow_wasmtime_component::Wasmtime::default();
 
     #[cfg(feature = "wasmtime_nn")]
     let runtime = ow_wasmtime_nn::Wasmtime::default();
 
-    
+    #[cfg(feature = "wasmtime_component")]
+    let runtime = ow_wasmtime_component::Wasmtime::default();
+
+    #[cfg(feature = "wasmtime_component_nn")]
+    let runtime = ow_wasmtime_component_nn::Wasmtime::default();
+
     let mut executor = tide::with_state(runtime);
 
     executor.at("/:container_id/destroy").post(core::destroy);

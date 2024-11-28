@@ -140,7 +140,7 @@ macro_rules! memory_method {
 
 
 #[macro_export]
-macro_rules! nn_memory_method {
+macro_rules! memory_nn_method {
     ($($t:ident)*) => ($(
 
         use serde_json::Value;

@@ -4,10 +4,11 @@ members = [
     "ow-common",
     "ow-executor",
     "ow-wasmtime",
-    "ow-wasmtime-component",
     "ow-wasmtime-nn",
+    "ow-wasmtime-component",
+    "ow-wasmtime-component-nn",
     "action-builder",
-    "action-builder-component"
+    "action-builder-component",
 ]
 
 [profile.release]

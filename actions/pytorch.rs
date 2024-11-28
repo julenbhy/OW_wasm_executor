@@ -4,14 +4,15 @@ use wasi_nn::{self, ExecutionTarget, GraphBuilder, GraphEncoding};
 use base64;
 
 pub fn func(json: serde_json::Value, model_bytes: &[u8]) -> Result<serde_json::Value, anyhow::Error> {
-
+    println!("Start func");
     //let model_bytes = unsafe { std::slice::from_raw_parts(MODEL, MODEL_LEN) };
 
     let graph = GraphBuilder::new(GraphEncoding::Pytorch, ExecutionTarget::CPU)
         .build_from_bytes(&[&model_bytes])?;
 
+    println!("Graph built successfully, initializing execution context...");
     let mut context = graph.init_execution_context()?;
-
+    println!("Execution context initialized.");
 
     // Get the image bytes from JSON
     let image_base64 = json["image"].as_str().ok_or_else(|| {

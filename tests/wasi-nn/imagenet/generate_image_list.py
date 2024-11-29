@@ -11,7 +11,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
 class ImageNetScraper:
-    def __init__(self, total_images, save_images=True, scrape_only_flickr=True):
+    def __init__(self, total_images, save_images=True, scrape_only_flickr=True, target_classes=None):
         self.total_images = total_images
         self.save_images = save_images
         self.scrape_only_flickr = scrape_only_flickr
@@ -22,6 +22,7 @@ class ImageNetScraper:
 
         self.classes_to_scrape = []
         self.downloaded_images = {}
+        self.target_classes = target_classes
 
     def imagenet_api_wnid_to_urls(self, wnid):
         return f'http://www.image-net.org/api/imagenet.synset.geturls?wnid={wnid}'
@@ -29,12 +30,14 @@ class ImageNetScraper:
     def scrape_images(self):
         self.classes_to_scrape = []
         for key, val in self.class_info_dict.items():
-            if (self.scrape_only_flickr and int(val['flickr_img_url_count']) > 1):
-                self.classes_to_scrape.append(key)
+            class_name = val['class_name']
+            if class_name not in self.class_info_dict:
+                if (self.scrape_only_flickr and int(val['flickr_img_url_count']) > 1):
+                    if self.target_classes is None or class_name in self.target_classes:
+                        self.classes_to_scrape.append(key)
 
-        print("Picked the following classes:")
+        print("Picked the following classes:", len(self.classes_to_scrape))
         print([self.class_info_dict[class_wnid]['class_name'] for class_wnid in self.classes_to_scrape])
-
         for class_wnid in self.classes_to_scrape:
             class_name = self.class_info_dict[class_wnid]["class_name"]
             print(f'Scraping images for class \"{class_name}\"')
@@ -42,7 +45,7 @@ class ImageNetScraper:
             resp = requests.get(url_urls)
             urls = [url.decode('utf-8') for url in resp.content.splitlines()]
             for url in urls:
-                time.sleep(0.5)
+                # time.sleep(0.1)
                 succeded = self.get_image(url, class_name)
                 if succeded:
                     break
@@ -92,7 +95,13 @@ class ImageNetScraper:
         self.downloaded_images[class_name] = img_url
         return True
 
-scraper = ImageNetScraper(total_images=128)
+# Load list of target_classes
+target_classes = []
+with open('target_classes.txt', 'r') as f:
+    for line in f:
+        target_classes.append(line.strip())
+
+scraper = ImageNetScraper(total_images=512, target_classes=target_classes)
 images = scraper.scrape_images()
 # Save in json
 with open('imagenet_images.json', 'w') as f:

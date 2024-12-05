@@ -36,10 +36,15 @@ export!(MyWorld);
 use anyhow::{Result, anyhow};
 use image::{DynamicImage, RgbImage};
 use base64;
+use bytemuck::cast_slice;
 
 pub fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error> {
 
     println!("\n\nFROM WASM: running");
+
+    let class_labels = json["class_labels"].as_array().ok_or_else(|| {
+        anyhow::anyhow!("From wasm: 'class_labels' not found or not an array in JSON")
+    })?;
 
     // Get the model
     let model_base64 = json["model"].as_str().ok_or_else(|| {
@@ -60,8 +65,8 @@ pub fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error>
     let image_bytes = base64::decode(image_base64)?;
 
     // Preprocessing. Normalize data based on model requirements https://github.com/onnx/models/tree/main/validated/vision/classification/mobilenet#preprocessing
-    let tensor_data = preprocess(
-        image_bytes.as_slice(),
+    let tensor_data = preprocess_one(
+        image_bytes,
         224,
         224,
         &[0.485, 0.456, 0.406],
@@ -78,25 +83,26 @@ pub fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error>
     context.set_input("data", tensor).unwrap();
 
     context.compute().unwrap();
-    
-    let output_buffer = vec![0f32; 1000];
-    let _output_data = context.get_output("squeezenet0_flatten0_reshape0").unwrap().data();
 
-    let result = softmax(output_buffer);
+    let output_data = context.get_output("squeezenet0_flatten0_reshape0").unwrap().data();
 
-    /*
-        println!(
-        "Found results, sorted top 5: {:?}",
-        &sort_results(&result)[..5]
-    );
-    */
-    // Build the response json sunch as the previous print statement
+    let output_len = output_data.len();
+    println!("Output data length: {}", output_len);
+    let output_vec: Vec<f32> = cast_slice(&output_data).to_vec();
+//     let output_vec = vec![0f32; 1000];
+    let result = softmax(output_vec);
+
     let result = sort_results(&result)[..5]
         .iter()
         .map(|InferenceResult(class, prob)| {
+            let label = class_labels
+                        .get(*class)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
             serde_json::json!({
                 "class": class,
-                "probability": prob
+                "probability": prob,
+                "label": label,
             })
         })
         .collect::<Vec<serde_json::Value>>();
@@ -109,35 +115,34 @@ pub fn func(json: serde_json::Value) -> Result<serde_json::Value, anyhow::Error>
 
 // Resize image to height x width, and then converts the pixel precision to FP32, normalize with
 // given mean and std. The resulting RGB pixel vector is then returned.
-fn preprocess(image: &[u8], height: u32, width: u32, mean: &[f32], std: &[f32]) -> Vec<u8> {
-    let dyn_img: DynamicImage = image::load_from_memory(image).unwrap().resize_exact(
-        width,
-        height,
-        image::imageops::Triangle,
-    );
-    let rgb_img: RgbImage = dyn_img.to_rgb8();
+fn preprocess_one(image: Vec<u8>, height: u32, width: u32, mean: &[f32], std: &[f32]) -> Vec<u8> {
+    println!("Image size in bytes: {}", image.len());
+    let img = image::load_from_memory(&image).unwrap().to_rgb8();
+    let resized =
+        image::imageops::resize(&img, height, width, ::image::imageops::FilterType::Triangle);
 
-    // Get an array of the pixel values
-    let raw_u8_arr: &[u8] = &rgb_img.as_raw()[..];
-
-    // Create an array to hold the f32 value of those pixels
-    let bytes_required = raw_u8_arr.len() * 4;
+    let mut flat_img: Vec<f32> = Vec::new();
+    for rgb in resized.pixels() {
+        flat_img.push((rgb[0] as f32 / 255. - 0.485) / 0.229);
+        flat_img.push((rgb[1] as f32 / 255. - 0.456) / 0.224);
+        flat_img.push((rgb[2] as f32 / 255. - 0.406) / 0.225);
+    }
+    let bytes_required = flat_img.len() * 4;
     let mut u8_f32_arr: Vec<u8> = vec![0; bytes_required];
 
-    // Read the number as a f32 and break it into u8 bytes
-    for i in 0..raw_u8_arr.len() {
-        let u8_f32: f32 = raw_u8_arr[i] as f32;
-        let rgb_iter = i % 3;
+    for c in 0..3 {
+        for i in 0..(flat_img.len() / 3) {
+            // Read the number as a f32 and break it into u8 bytes
+            let u8_f32: f32 = flat_img[i * 3 + c] as f32;
+            let u8_bytes = u8_f32.to_ne_bytes();
 
-        // Normalize the pixel
-        let norm_u8_f32: f32 = (u8_f32 / 255.0 - mean[rgb_iter]) / std[rgb_iter];
-
-        // Convert it to u8 bytes and write it with new shape
-        let u8_bytes = norm_u8_f32.to_ne_bytes();
-        for j in 0..4 {
-            u8_f32_arr[(raw_u8_arr.len() * 4 * rgb_iter / 3) + (i / 3) * 4 + j] = u8_bytes[j];
+            for j in 0..4 {
+                u8_f32_arr[((flat_img.len() / 3 * c + i) * 4) + j] = u8_bytes[j];
+            }
         }
     }
+
+    println!("Image preprocessed.");
     u8_f32_arr
 }
 
@@ -166,6 +171,7 @@ fn sort_results(buffer: &[f32]) -> Vec<InferenceResult> {
     results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     results
 }
+
 
 #[derive(Debug, PartialEq)]
 struct InferenceResult(usize, f32);

@@ -22,7 +22,7 @@ def sync_call(action_name: str, params: dict):
 def async_call(action_name: str, params: dict):
     url = APIHOST+'/namespaces/_/actions/'+action_name+'?blocking=false&result=true&workers=1'
 
-    response = requests.post(url, json=params, headers=headers)
+    response = requests.post(url, json=params, headers=headers, timeout=600)
     print('REQUEST:', response.request.__dict__)
     data = json.loads(response.text)
     activation_id = data["activationId"]
@@ -34,7 +34,7 @@ def get_results(activation_id):
 
     # Wait until the worker completes the job
     while True:
-        result = requests.get(url, headers=headers)
+        result = requests.get(url, headers=headers, timeout=600)
         if result.status_code == 200:
             break
         time.sleep(0.001)
@@ -99,7 +99,7 @@ def create_experiments (model_name, num_parts):
     return model_experiments
 
 def main():
-    model_name = 'resnet_152' # 'squeezenet1_1' or 'resnet_152'
+    model_name = 'squeezenet1_1' # 'squeezenet1_1' or 'resnet_152'
     num_parts = 5
     model_experiments = create_experiments(model_name, num_parts)
     results = []
@@ -111,7 +111,7 @@ def main():
         results.append({'responses': responses, 'elapsed_time': elapsed_time})
 
     # Save in json
-    with open('model_parts.json', 'w') as f:
+    with open('model_parts/original/model_parts.json', 'w') as f:
         json.dump(results, f)
 
 if __name__ == '__main__':

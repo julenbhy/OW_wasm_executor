@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration,};
+use std::{sync::Arc, time::Duration, sync::Mutex};
 use dashmap::DashMap;
 use timedmap::TimedMap;
 use anyhow::anyhow;
@@ -69,8 +69,8 @@ impl WasmRuntime for Wasmtime {
         module: Vec<u8>,
     ) -> anyhow::Result<()> {
 
-        let module_hash = fasthash::metro::hash64(&module); 
-        
+        let module_hash = fasthash::metro::hash64(&module);
+
         // Check if the preinstance of the module is already in the cache
         let instance_pre = if let Some(pre) = self.instance_pre_cache.get(&module_hash) {
             self.instance_pre_cache.refresh(&module_hash, CACHE_TTL);
@@ -152,7 +152,7 @@ impl WasmRuntime for Wasmtime {
     }
 
     fn destroy(
-        &self, 
+        &self,
         container_id: &str
     ) {
         if let None = self.instance_pres.remove(container_id) {
@@ -192,8 +192,8 @@ fn link_host_functions(
 }
 
 fn pass_input(
-    instance: &wasmtime::Instance, 
-    store: &mut Store<WasmCtx>, 
+    instance: &wasmtime::Instance,
+    store: &mut Store<WasmCtx>,
     parameters: &Value
 ) -> Result<(), anyhow::Error> {
 
@@ -218,7 +218,7 @@ fn pass_input(
 
 
 fn retrieve_result(
-    instance: &wasmtime::Instance, 
+    instance: &wasmtime::Instance,
     store: &mut Store<WasmCtx>
 ) -> Result<Value, anyhow::Error> {
     // Access the WASM memory
@@ -250,14 +250,14 @@ fn retrieve_result(
 
 
 fn pass_model(
-    instance: &wasmtime::Instance, 
+    instance: &wasmtime::Instance,
     store: &mut Store<WasmCtx>,
     parameters: &Value,
     model_cache: &Arc<TimedMap<String, Vec<u8>>>
 ) -> Result<(), anyhow::Error> {
-    
+
     let model_key = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?.to_string();
-    
+
     // Check if the model is already in the cache
     let model_bytes = if let Some(cached_bytes) = model_cache.get(&model_key) {
         println!("Model found in cache. Using cached model...");
@@ -296,6 +296,8 @@ fn handle_replace_images(parameters: &mut Value) -> Result<(), Box<dyn std::erro
         .get("replace_images")
         .and_then(|v| v.as_str())
         .unwrap_or("");
+
+    println!("Replacing images with method: {}", replace_images);
 
     match replace_images {
         "URL" => replace_image_urls_parallel(parameters)?,
@@ -351,43 +353,49 @@ fn replace_image_urls_parallel(
 ) -> anyhow::Result<()> {
     if let Some(image_value) = parameters.get_mut("image") {
         match image_value {
-            // Case: 'image' is a string
-            serde_json::Value::String(image) => {
-                let image_bytes = reqwest::blocking::get(&**image)
-                    .and_then(|response| response.bytes())
-                    .map(|bytes| base64::encode(&bytes))
-                    .unwrap_or_else(|_| "IMAGE_DOWNLOAD_FAILED".to_string());
-                *image_value = serde_json::Value::String(image_bytes);
-            }
-            // Case: 'image' is an array of strings
-            serde_json::Value::Array(images) => {
-                // Process the URLs in parallel using Rayon
-                let encoded_images: Vec<serde_json::Value> = images
-                    .par_iter()
-                    .map(|image| {
-                        if let Some(image_url) = image.as_str() {
-                            reqwest::blocking::get(image_url)
-                                .and_then(|response| response.bytes())
-                                .map(|bytes| serde_json::Value::String(base64::encode(&bytes)))
-                                .unwrap_or_else(|_| serde_json::Value::String("IMAGE_DOWNLOAD_FAILED".to_string()))
-                        } else {
-                            serde_json::Value::String("INVALID_IMAGE_URL".to_string())
-                        }
-                    })
-                    .collect();
+            serde_json::Value::Array(image_urls) => {
+                // Shared results container
+                let encoded_images = Arc::new(Mutex::new(Vec::new()));
+                let mut handles = vec![];
+                // Print number of images
+                for image in image_urls.clone() {
+                    if let Some(image_url) = image.as_str() {
+                        let encoded_images = Arc::clone(&encoded_images);
+                        let image_url = image_url.to_string();
+                        // Spawn a thread for each image URL
+                        let handle = std::thread::spawn(move || -> anyhow::Result<()> {
+                            let image_bytes = reqwest::blocking::get(&image_url)?.bytes()?.to_vec();
+                            let encoded_image = serde_json::Value::String(base64::encode(&image_bytes));
+                            // Safely append the encoded image to the results
+                            let mut lock = encoded_images.lock().unwrap();
+                            lock.push(encoded_image);
+                            Ok(())
+                        });
 
-                // Assign the processed values
-                *image_value = serde_json::Value::Array(encoded_images);
+                        handles.push(handle);
+                    } else {
+                        return Err(anyhow::anyhow!("From embedder: 'image_urls' list contains a non-string value"));
+                    }
+                }
+
+                // Wait for all threads to complete
+                for handle in handles {
+                    handle.join().map_err(|e| anyhow::anyhow!("Thread error: {:?}", e))??;
+                }
+
+                // Replace the "image" field in parameters with the results
+                let final_results = Arc::try_unwrap(encoded_images)
+                    .unwrap_or_else(|_| Mutex::new(Vec::new()))
+                    .into_inner()
+                    .unwrap();
+                parameters["image"] = serde_json::Value::Array(final_results);
             }
-            // Case: 'image' is neither a string nor an array
             _ => {
-                return Err(anyhow::anyhow!(
-                    "From embedder: 'image' is not a string or a list of strings"
-                ));
+                return Err(anyhow::anyhow!("From embedder: 'image_urls' is not a list"));
             }
         }
     } else {
-        return Err(anyhow::anyhow!("From embedder: 'image' not found in JSON"));
+        return Err(anyhow::anyhow!("From embedder: 'image_urls' key not found in JSON"));
     }
     Ok(())
 }

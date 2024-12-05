@@ -4,21 +4,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow.workspace = true
+base64.workspace = true
+image = "0.25.5"
 serde_json = "1.0.117"
-wit-bindgen-rt = { version = "0.26.0", features = ["bitflags"] }
+wit-bindgen = { version = "0.36.0",  default-features = false, features = ["macros"] }
+wit-bindgen-rt = { version = "0.36.0", features = ["bitflags"] }
 
 [lib]
 name = "action_component"
 crate-type = ["cdylib"]
 
-[profile.release]
-codegen-units = 1
-opt-level = "s"
-debug = false
-strip = true
-lto = true
-
-[package.metadata.component]
-package = "component:component-builder"
-
 [package.metadata.component.dependencies]
+
+
+
+[features]
+default = []
+component = []
+component_nn = []
+
+

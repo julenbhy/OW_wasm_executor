@@ -6,9 +6,11 @@ s3 = session.resource('s3')
 my_bucket = s3.Bucket('rusty-bucket')
 
 objs = list(my_bucket.objects.filter(Prefix='imagenet/'))
+if objs:
+    objs.pop(0)
 
 # Save in file
-with open('../fixture/imagenet_keys.txt', 'w') as f:
+with open('imagenet_keys.txt', 'w') as f:
     for obj in objs:
         f.write(obj.key + '\n')
 

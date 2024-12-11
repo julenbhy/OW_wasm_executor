@@ -311,43 +311,6 @@ fn handle_replace_images(parameters: &mut Value) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-// Unused
-fn replace_image_urls(
-    parameters: &mut Value
-) -> anyhow::Result<()> {
-    if let Some(image_value) = parameters.get_mut("image") {
-        match image_value {
-            // Caso: 'image' es una cadena
-            Value::String(image) => {
-                let image_url = image.as_str(); // Tomamos una referencia inmutable
-                let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
-                *image_value = Value::String(base64::encode(&image_bytes));
-            }
-            // Caso: 'image' es una lista de cadenas
-            Value::Array(images) => {
-                let mut encoded_images = Vec::new();
-                for image in images.iter() {
-                    if let Some(image_url) = image.as_str() {
-                        let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
-                        encoded_images.push(Value::String(base64::encode(&image_bytes)));
-                    } else {
-                        return Err(anyhow!("From embedder: 'image' list contains a non-string value"));
-                    }
-                }
-                *image_value = Value::Array(encoded_images);
-            }
-            // Caso: 'image' no es ni una cadena ni una lista
-            _ => {
-                return Err(anyhow!("From embedder: 'image' is not a string or a list of strings"));
-            }
-        }
-    } else {
-        return Err(anyhow!("From embedder: 'image' not found in JSON"));
-    }
-    Ok(())
-}
-
-
 fn replace_image_urls_parallel(
     parameters: &mut serde_json::Value,
 ) -> anyhow::Result<()> {
@@ -403,33 +366,58 @@ fn replace_image_urls_parallel(
 fn replace_image_urls_s3_parallel(parameters: &mut Value) -> Result<(), anyhow::Error> {
     // Configure the S3 client
     let runtime = Runtime::new()?;
-
     let region_provider = RegionProviderChain::default_provider().or_else("eu-west-1");
     let config = runtime.block_on(aws_config::from_env().region(region_provider).load());
     let client = Client::new(&config);
 
-    if let Some(image_value) = parameters.get_mut("image") {
+    if let Some(image_value) = parameters.get_mut("image_uris") {
         match image_value {
             Value::Array(image_uris) => {
-                let encoded_images: Result<Vec<Value>, anyhow::Error> = image_uris
-                    .par_iter() // Parallel iterator
-                    .map(|image| {
-                        if let Some(image_url) = image.as_str() {
-                            runtime
-                                .block_on(download_image_s3(&client, image_url))
-                                .map(|encoded_image| Value::String(encoded_image))
-                        } else {
-                            Err(anyhow!("From embedder: 'image_uris' list contains a non-string value"))
-                        }
-                    })
-                    .collect();
-               parameters["image"] = Value::Array(encoded_images?);
+                // Shared results container
+                let encoded_images = Arc::new(Mutex::new(Vec::new()));
+                let mut handles = vec![];
+
+                for image in image_uris.clone() {
+                    if let Some(image_url) = image.as_str() {
+                        let client = client.clone();
+                        let image_url = image_url.to_string();
+                        let encoded_images = Arc::clone(&encoded_images);
+                        let runtime = runtime.handle().clone();
+
+                        // Spawn a thread for each S3 URI
+                        let handle = std::thread::spawn(move || -> Result<(), anyhow::Error> {
+                            let encoded_image = runtime.block_on(download_image_s3(&client, &image_url))?;
+                            let mut lock = encoded_images.lock().unwrap();
+                            lock.push(Value::String(encoded_image));
+                            Ok(())
+                        });
+
+                        handles.push(handle);
+                    } else {
+                        return Err(anyhow!("From embedder: 'image_uris' list contains a non-string value"));
+                    }
+                }
+
+                // Wait for all threads to complete
+                for handle in handles {
+                    handle.join().map_err(|e| anyhow!("Thread error: {:?}", e))??;
+                }
+
+                // Replace the "image" field in parameters with the results
+                let final_results = Arc::try_unwrap(encoded_images)
+                    .unwrap_or_else(|_| Mutex::new(Vec::new()))
+                    .into_inner()
+                    .unwrap();
+                parameters["image"] = Value::Array(final_results);
             }
-            _ => {return Err(anyhow!("From embedder: 'image' is not a list"));}
+            _ => {
+                return Err(anyhow!("From embedder: 'image_uris' is not a list"));
+            }
         }
     } else {
-        return Err(anyhow!("From embedder: 'image' key not found in JSON"));
+        return Err(anyhow!("From embedder: 'image_uris' key not found in JSON"));
     }
+
 
     Ok(())
 }

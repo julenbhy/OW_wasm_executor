@@ -1,0 +1,28 @@
+[package]
+name = "ow-wasmtime-nn-parallel"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+dashmap = { workspace = true }
+timedmap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+fasthash = { workspace = true }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+rayon = { workspace = true }
+aws-sdk-s3 = { workspace = true }
+aws-config = { workspace = true }
+tokio = { workspace = true }
+
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-nn = { workspace = true, optional = true }
+ow-common = { workspace = true }
+
+
+[features]
+default = ["wasmtime-wasi-nn"]

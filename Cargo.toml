@@ -5,6 +5,7 @@ members = [
     "ow-executor",
     "ow-wasmtime",
     "ow-wasmtime-nn",
+    "ow-wasmtime-nn-parallel",
     "ow-wasmtime-component",
     "ow-wasmtime-component-nn",
     "action-builder",

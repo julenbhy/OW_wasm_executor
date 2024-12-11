@@ -1,4 +1,6 @@
 import json
+import urllib
+
 import requests
 import time
 import base64
@@ -39,17 +41,23 @@ def async_call(action_name: str, params: dict):
     return result['response']['result'], elapsed_time
 
 def main():
-
     # build the request json
     model_link = 'https://github.com/rahulchaphalkar/libtorch-models/releases/download/v0.1/squeezenet1_1.pt'
     image = 'https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcRo8RNvXDcolY6HqEFywzudZcp9SH3USqSaog7RijHSWyNFGsqk'
 
-    req_body = { 'image': image, 'model': model_link }
+    imagenet_1k = "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
+    response = urllib.request.urlopen(imagenet_1k)
+    class_labels = [line.strip() for line in response.read().decode("utf-8").split("\n") if line]
+
+    req_body = { 'image': image,
+                 'model': model_link ,
+                 'class_labels': class_labels
+                 }
 
     # make the request
     response ,elapsed_time = sync_call('pytorch_component', req_body)
 
-    print('\nRESPONSE:', response)
+    print('\nRESPONSE:', json.dumps(json.loads(response), indent=4))
     print('TIME TAKEN:', elapsed_time)
 
 

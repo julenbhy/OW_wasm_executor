@@ -21,7 +21,8 @@ use aws_sdk_s3::Client;
 use aws_config::meta::region::RegionProviderChain;
 use base64::encode;
 use tokio::runtime::Runtime;
-
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct Wasmtime {
@@ -108,48 +109,181 @@ impl WasmRuntime for Wasmtime {
         Ok(())
     }
 
-
     fn run(
         &self,
         container_id: &str,
         mut parameters: Value,
     ) -> Result<Result<Value, Value>, anyhow::Error> {
-        let mut metrics = HashMap::new();
-
         let wasm_action = self
             .instance_pres
             .get(container_id)
             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
         let instance_pre = &wasm_action.module;
-
-        let mut store = create_store(&self.engine);
-
-        // Replace the image URLs with their base64-encoded contents (if needed)
-        let start_time = Instant::now();
         handle_replace_images(&mut parameters);
-        metrics.insert("download_images_time", start_time.elapsed().as_secs_f64());
 
-        let instance = instance_pre.instantiate(&mut store).unwrap();
+        let model_keys = parameters["models"]
+            .as_array()
+            .ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON or is not an array"))?;
+        let results = Arc::new(Mutex::new(Value::Object(serde_json::Map::new())));
 
-        // Write the input to the WASM memory
-        pass_input(&instance, &mut store, &parameters)?;
+        let start_functions_time = Instant::now();
+        let mut handles = vec![];
 
-        // Write the model to the WASM memory
-        let start_time = Instant::now();
-        pass_model(&instance, &mut store, &parameters, &self.model_cache)?;
-        metrics.insert("pass_model_time", start_time.elapsed().as_secs_f64());
+        for model_key in model_keys {
+            let model_key = model_key
+                .as_str()
+                .ok_or_else(|| anyhow!("From embedder: 'model' contains a non-string value"))?
+                .to_string();
+            let parameters = parameters.clone();
+            let results = Arc::clone(&results);
+            let instance_pre = instance_pre.clone();
+            let engine = self.engine.clone();
+            let model_cache = self.model_cache.clone();
 
-        // Call the _start function
-        let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();
-        main.call(&mut store, ())?;
+            let handle = std::thread::spawn(move || -> Result<(), anyhow::Error> {
+                let thread_start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
+                let start_time = Instant::now();
 
-        // Retrieve the result from the WASM memory
-        let mut result = retrieve_result(&instance, &mut store)?;
+                let mut store = create_store(&engine);
 
-        // Add executor_metrics to the response
-        result["executor_metrics"] = serde_json::json!(metrics);
-        Ok(Ok(result))
+                let instance = instance_pre.instantiate(&mut store).unwrap();
+
+                // Write the input to the WASM memory
+                pass_input(&instance, &mut store, &parameters)?;
+
+                let start_pass_model_time = Instant::now();
+                let pass_model_start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
+                pass_model(&instance, &mut store, model_key.clone(), &model_cache)?;
+                let pass_model_end = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
+                let pass_model_duration = start_pass_model_time.elapsed().as_secs_f64();
+
+                // Call the _start function
+                let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();
+                main.call(&mut store, ())?;
+
+                // Retrieve the result from the WASM memory
+                let mut result = retrieve_result(&instance, &mut store)?;
+
+                let thread_end = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
+
+                // Add to the metrics the time taken to process the model
+                let duration = start_time.elapsed().as_secs_f64();
+
+                // Add timing metrics
+                result["metrics"]["func_time"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(duration).unwrap());
+                result["metrics"]["pass_model_time"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(pass_model_duration).unwrap());
+                result["metrics"]["thread_start"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(thread_start).unwrap());
+                result["metrics"]["thread_end"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(thread_end).unwrap());
+                result["metrics"]["pass_model_start"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(pass_model_start).unwrap());
+                result["metrics"]["pass_model_end"] =
+                    serde_json::Value::Number(serde_json::Number::from_f64(pass_model_end).unwrap());
+
+
+
+                println!("Model {} returned: {}", model_key, result);
+
+                // Store the result
+                let mut results_lock = results.lock().unwrap();
+                results_lock
+                    .as_object_mut()
+                    .unwrap()
+                    .insert(model_key, result);
+
+                Ok(())
+            });
+
+            handles.push(handle);
+        }
+
+        // Wait for all threads to finish
+        for handle in handles {
+            handle.join().map_err(|e| anyhow!("Thread error: {:?}", e))??;
+        }
+
+        let functions_duration = start_functions_time.elapsed().as_secs_f64();
+
+        let mut final_results = Arc::try_unwrap(results)
+            .unwrap_or_else(|_| Mutex::new(Value::Object(serde_json::Map::new())))
+            .into_inner()
+            .unwrap();
+        // Add functions_duration to the metrics
+        final_results["metrics"]["functions_duration"] =
+            serde_json::Value::Number(serde_json::Number::from_f64(functions_duration).unwrap());
+
+        Ok(Ok(final_results))
     }
+
+//     fn run(
+//         &self,
+//         container_id: &str,
+//         mut parameters: Value,
+//     ) -> Result<Result<Value, Value>, anyhow::Error> {
+//         let wasm_action = self
+//             .instance_pres
+//             .get(container_id)
+//             .ok_or_else(|| anyhow!(format!("No action named {}", container_id)))?;
+//         let instance_pre = &wasm_action.module;
+//         handle_replace_images(&mut parameters);
+//
+//         let model_keys = parameters["models"].as_array().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON or is not an array"))?;
+//         let results = Arc::new(Mutex::new(Value::Object(serde_json::Map::new())));
+//
+//         let start_functions_time = Instant::now();
+//         // Do a parallel iter over the model keys
+//         model_keys.par_iter().try_for_each(|model_key| {
+//             let start_time = Instant::now();
+//
+//             let model_key_str = model_key.as_str().ok_or_else(|| anyhow!("From embedder: 'model' contains a non-string value"))?;
+//
+//             let mut store = create_store(&self.engine);
+//
+//             // Replace the image URLs with their base64-encoded contents (if needed)
+//
+//             let instance = instance_pre.instantiate(&mut store).unwrap();
+//
+//             // Write the input to the WASM memory
+//             pass_input(&instance, &mut store, &parameters)?;
+//
+//             let start_pass_model_time = Instant::now();
+//             pass_model(&instance, &mut store, model_key_str.to_string(), &self.model_cache)?;
+//             let pass_model_duration = start_pass_model_time.elapsed().as_secs_f64();
+//
+//             // Call the _start function
+//             let main = instance.get_typed_func::<(), ()>(&mut store, "_start").unwrap();
+//             main.call(&mut store, ())?;
+//
+//             // Retrieve the result from the WASM memory
+//             let mut result = retrieve_result(&instance, &mut store)?;
+//
+//             // Add to the metrics the time taken to process the model
+//             let duration = start_time.elapsed().as_secs_f64();
+//
+//             // result is a json, add func_time to it
+//             result["metrics"]["func_time"] = serde_json::Value::Number(serde_json::Number::from_f64(duration).unwrap());
+//             result["metrics"]["pass_model_time"] = serde_json::Value::Number(serde_json::Number::from_f64(pass_model_duration).unwrap());
+//             println!("Model {} returned: {}", model_key_str, result);
+//             let mut results_lock = results.lock().unwrap();
+//             results_lock.as_object_mut().unwrap().insert(model_key_str.to_string(), result);
+//
+//             // Return the result
+//             Ok::<(), anyhow::Error>(())
+//         });
+//         let functions_duration = start_functions_time.elapsed().as_secs_f64();
+//
+//         let mut final_results = Arc::try_unwrap(results)
+//         .unwrap_or_else(|_| Mutex::new(Value::Object(serde_json::Map::new())))
+//         .into_inner()
+//         .unwrap();
+//         // Add functions_duration to the metrics
+//         final_results["metrics"]["functions_duration"] = serde_json::Value::Number(serde_json::Number::from_f64(functions_duration).unwrap());
+//
+//         Ok(Ok(final_results))
+//     }
 
     fn destroy(
         &self,
@@ -252,11 +386,9 @@ fn retrieve_result(
 fn pass_model(
     instance: &wasmtime::Instance,
     store: &mut Store<WasmCtx>,
-    parameters: &Value,
+    model_key: String,
     model_cache: &Arc<TimedMap<String, Vec<u8>>>
 ) -> Result<(), anyhow::Error> {
-
-    let model_key = parameters["model"].as_str().ok_or_else(|| anyhow!("From embedder: 'model' not found in JSON"))?.to_string();
 
     // Check if the model is already in the cache
     let model_bytes = if let Some(cached_bytes) = model_cache.get(&model_key) {
@@ -291,13 +423,12 @@ fn pass_model(
     Ok(())
 }
 
+
 fn handle_replace_images(parameters: &mut Value) -> Result<(), Box<dyn std::error::Error>> {
     let replace_images = parameters
         .get("replace_images")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-
-    println!("Replacing images with method: {}", replace_images);
 
     match replace_images {
         "URL" => replace_image_urls_parallel(parameters)?,
@@ -311,24 +442,66 @@ fn handle_replace_images(parameters: &mut Value) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+// Unused
+fn replace_image_urls(
+    parameters: &mut Value
+) -> anyhow::Result<()> {
+    if let Some(image_value) = parameters.get_mut("image") {
+        match image_value {
+            // Caso: 'image' es una cadena
+            Value::String(image) => {
+                let image_url = image.as_str(); // Tomamos una referencia inmutable
+                let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
+                *image_value = Value::String(base64::encode(&image_bytes));
+            }
+            // Caso: 'image' es una lista de cadenas
+            Value::Array(images) => {
+                let mut encoded_images = Vec::new();
+                for image in images.iter() {
+                    if let Some(image_url) = image.as_str() {
+                        let image_bytes = reqwest::blocking::get(image_url)?.bytes()?.to_vec();
+                        encoded_images.push(Value::String(base64::encode(&image_bytes)));
+                    } else {
+                        return Err(anyhow!("From embedder: 'image' list contains a non-string value"));
+                    }
+                }
+                *image_value = Value::Array(encoded_images);
+            }
+            // Caso: 'image' no es ni una cadena ni una lista
+            _ => {
+                return Err(anyhow!("From embedder: 'image' is not a string or a list of strings"));
+            }
+        }
+    } else {
+        return Err(anyhow!("From embedder: 'image' not found in JSON"));
+    }
+    Ok(())
+}
+
+
 fn replace_image_urls_parallel(
     parameters: &mut serde_json::Value,
 ) -> anyhow::Result<()> {
-    if let Some(image_value) = parameters.get_mut("image") {
+    if let Some(image_value) = parameters.get_mut("image_urls") {
         match image_value {
             serde_json::Value::Array(image_urls) => {
                 // Shared results container
                 let encoded_images = Arc::new(Mutex::new(Vec::new()));
                 let mut handles = vec![];
-                // Print number of images
+
                 for image in image_urls.clone() {
                     if let Some(image_url) = image.as_str() {
                         let encoded_images = Arc::clone(&encoded_images);
                         let image_url = image_url.to_string();
+
                         // Spawn a thread for each image URL
                         let handle = std::thread::spawn(move || -> anyhow::Result<()> {
+                            println!("Downloading image from URL: {}", image_url);
                             let image_bytes = reqwest::blocking::get(&image_url)?.bytes()?.to_vec();
+                            println!("Image downloaded. Now encoding...");
                             let encoded_image = serde_json::Value::String(base64::encode(&image_bytes));
+                            println!("Image downloaded and encoded");
+
                             // Safely append the encoded image to the results
                             let mut lock = encoded_images.lock().unwrap();
                             lock.push(encoded_image);
@@ -418,9 +591,9 @@ fn replace_image_urls_s3_parallel(parameters: &mut Value) -> Result<(), anyhow::
         return Err(anyhow!("From embedder: 'image_uris' key not found in JSON"));
     }
 
-
     Ok(())
 }
+
 
 
 async fn download_image_s3(client: &Client, s3_url: &str) -> Result<String, anyhow::Error> {
@@ -440,7 +613,6 @@ async fn download_image_s3(client: &Client, s3_url: &str) -> Result<String, anyh
     // Encode as Base64 and return
     Ok(encode(&bytes))
 }
-
 
 
 

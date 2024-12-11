@@ -55,53 +55,42 @@ def list_image_paths(directory_path, num_images):
 # Execute experiment
 def model_parts(model_links):
     start_time = time.time()
-    activation_ids = []
-    for model_link in model_links:
-        req_body = {
-            'model': model_link,
-            'replace_images': '',
-        }
-        activation_id = async_call('model_parts', req_body)
-        activation_ids.append(activation_id)
+    req_body = {
+        'models': model_links,
+        'replace_images': '',
+    }
 
-    # get the results
-    responses = []
-    for activation_id in activation_ids:
-        response = get_results(activation_id)
-        try:
-            response = response['result']
-            metrics = response['metrics']
-            executor_metrics = response['executor_metrics']
-            del executor_metrics['download_images_time']
-            metrics.update(executor_metrics)
-            response = metrics
-        except:
-            pass
-        responses.append(response)
+    activation_id = async_call('model_parts', req_body)
+    response = get_results(activation_id)
+    try:
+        response = response['result']
+    except:
+        pass
 
     elapsed_time = time.time() - start_time
-    return responses, elapsed_time
+    return response, elapsed_time
 
 
 
-def create_experiments (model_name, num_parts):
+def create_experiments (model_name, min_parts, max_parts):
     # model_experiments = [
     #     ['https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/1/0.pt'],
     #     ['https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/2/0.pt', 'https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/2/1.pt'],
     #     ['https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/3/0.pt', 'https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/3/1.pt', 'https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/resnet_152/3/2.pt']
     # ]
     model_experiments = []
-    for i in range(1, num_parts+1):
+    for i in range(min_parts, max_parts+1):
         model_parts = []
         for j in range(i):
-            model_parts.append(f'https://huggingface.co/pepecalero/TorchscriptSplitModels/resolve/main/{model_name}/{i}/{j}.pt')
+            model_parts.append(f'https://huggingface.co/pepecalero/TorchscriptSplitModelsOriginal/resolve/main/{model_name}/{i}/{j}.pt')
         model_experiments.append(model_parts)
     return model_experiments
 
 def main():
-    model_name = 'squeezenet1_1' # 'squeezenet1_1' or 'resnet_152'
-    num_parts = 5
-    model_experiments = create_experiments(model_name, num_parts)
+    model_name = 'resnet_152' # 'squeezenet1_1' or 'resnet_152' or 'resnet50' or 'resnet_18' or 'mobilenet_v3_large'
+    min_parts = 1
+    max_parts = 20 # 8 or 20 or 11 or 5 or 11
+    model_experiments = create_experiments(model_name, min_parts, max_parts)
     results = []
     for model_experiment in model_experiments:
         model_parts(model_experiment)
@@ -111,8 +100,8 @@ def main():
         results.append({'responses': responses, 'elapsed_time': elapsed_time})
 
     # Save in json
-    with open('model_parts/original/model_parts.json', 'w') as f:
-        json.dump(results, f)
+    with open('model_parts.json', 'w') as f:
+        json.dump(results, f, indent=4)
 
 if __name__ == '__main__':
     main()
